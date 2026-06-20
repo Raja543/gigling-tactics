@@ -19,13 +19,14 @@ import {
 } from "@/engine/balance";
 import { Info, Target, Zap, Shield, Heart, Swords, Trophy, Users, ArrowRightLeft, PackageOpen, Dices } from "lucide-react";
 
+// Order MUST match the on-page section order for scroll-spy to work correctly.
 const SECTIONS = [
   ["overview", "Overview"],
   ["how-to-play", "How to Play"],
   ["card-generation", "Card Generation Engine"],
   ["stats", "Individual Stats"],
-  ["rarities", "Rarities"],
   ["factions", "Factions & Synergies"],
+  ["rarities", "Rarities & Specials"],
   ["traits", "Traits & Abilities"],
   ["battle", "Combat System"],
   ["arenas", "Ranked Arenas"],
@@ -119,25 +120,26 @@ export default function DocsPage() {
   const [active, setActive] = useState(SECTIONS[0][0]);
 
   useEffect(() => {
+    const OFFSET = 140; // sticky-header buffer
     const handleScroll = () => {
+      // If we're at the bottom of the page, the last section is active even if
+      // it never crosses the offset (short final sections otherwise miss).
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (atBottom) {
+        setActive(SECTIONS[SECTIONS.length - 1][0]);
+        return;
+      }
+      // Otherwise: the last section whose top has scrolled past the offset.
       let currentActive = SECTIONS[0][0];
-      // We check which section's top is at or above the navbar/offset
       for (const [id] of SECTIONS) {
         const el = document.getElementById(id);
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          // 150px allows a buffer for the sticky header
-          if (rect.top <= 150) {
-            currentActive = id;
-          }
-        }
+        if (el && el.getBoundingClientRect().top <= OFFSET) currentActive = id;
       }
       setActive(currentActive);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll(); // Trigger once on mount
-
+    handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
@@ -288,87 +290,6 @@ export default function DocsPage() {
             </div>
           </Section>
 
-          <Section id="battle" title="Combat System Mechanics">
-            <p>
-              Combat plays out automatically over a maximum of <strong className="text-white">{BATTLE_TURN_LIMIT} turns</strong>. 
-              Understanding the mathematics of the combat engine is critical to building a winning squad.
-            </p>
-
-            <Panel className="my-6">
-              <div className="font-heading font-bold text-white mb-3 text-lg">1. Turn Order (Speed)</div>
-              <p className="text-sm text-white/60 mb-3">
-                Every turn, the engine sorts all living combatants by their <strong>Effective Speed</strong>. 
-                Speed determines initiative—attacking first is a massive advantage because a dead unit cannot counter-attack.
-              </p>
-              <code className="block text-sm font-mono text-white/80 bg-black/40 rounded p-3 mb-2 border border-white/5">
-                EffectiveSpeed = BaseSpeed × (1 + TraitBoost) + (Luck ÷ 10)
-              </code>
-              <p className="text-xs text-white/40 italic">Note: Luck serves as a micro-tiebreaker when Base Speeds are identical.</p>
-            </Panel>
-
-            <Panel className="my-6">
-              <div className="font-heading font-bold text-white mb-3 text-lg">2. Damage Resolution</div>
-              <p className="text-sm text-white/60 mb-3">
-                Damage is resolved using a net-difference formula. Defense directly subtracts from incoming Attack power, making highly defensive tanks very difficult to kill without raw DPS.
-              </p>
-              <code className="block text-sm font-mono text-white/80 bg-black/40 rounded p-3 mb-2 border border-white/5">
-                Damage = Math.max(1, (Attack × SpecialMultiplier) - (Defense × 0.5))
-              </code>
-              <p className="text-xs text-white/40 italic">Note: Special attacks (based on rarity) multiply the base Attack before Defense is subtracted, making them devastating.</p>
-            </Panel>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Panel>
-                <div className="font-heading font-bold text-white mb-2">3. The 15-Turn Limit</div>
-                <p className="text-sm text-white/60">
-                  Battles are fast and lethal due to the {BATTLE_HEALTH_MULTIPLIER}x Health multiplier. If the battle reaches turn {BATTLE_TURN_LIMIT} without a total team wipe, 
-                  the victor is decided by the highest remaining total team Health percentage.
-                </p>
-              </Panel>
-              <Panel>
-                <div className="font-heading font-bold text-white mb-2">4. Critical Hits & Luck</div>
-                <p className="text-sm text-white/60">
-                  Every card has a hidden Luck stat (1-20). The engine rolls a d20 against this stat; a success results in a Critical Hit, dealing 1.5x damage on top of the base calculation.
-                </p>
-              </Panel>
-            </div>
-          </Section>
-
-          <Section id="arenas" title="Ranked Arenas & Matchmaking">
-            <p className="mb-4">
-              Gigling Tactics utilizes a rigorous, dynamic matchmaking engine designed to scale with your skill level and prevent easy rating inflation.
-            </p>
-
-            <div className="grid sm:grid-cols-2 gap-4 mb-6">
-              <Panel>
-                <div className="font-heading font-bold text-white mb-2">Smart AI Matchmaking</div>
-                <p className="text-sm text-white/60">
-                  The AI doesn't just pick random cards. It calculates the <strong>Combat Score</strong> of potential combatants, heavily favoring highly lethal traits (like Surger or Last Stand). It will also actively search the database to construct 3-card teams of the same Faction to trigger powerful Synergy bonuses against you.
-                </p>
-              </Panel>
-              <Panel className="border-rose-500/30 bg-rose-500/5">
-                <div className="font-heading font-bold text-rose-400 mb-2">Boss Battles</div>
-                <p className="text-sm text-white/60">
-                  If you achieve a win streak of 3 or more games, the Arena triggers a <strong>Boss Match</strong>. The AI will aggressively over-level its team (+15 OVR) and prioritize drafting Epic, Legendary, Relic, or Giga rarity cards. Defeating a Boss grants massive bonus ELO.
-                </p>
-              </Panel>
-            </div>
-
-            <Panel className="my-4 border-l-4 border-l-fuchsia-500 bg-gradient-to-r from-fuchsia-500/5 to-transparent">
-              <div className="font-heading font-bold text-white mb-2 text-lg">Dynamic ELO Economy</div>
-              <p className="text-sm text-white/70 mb-3">
-                Unlike casual games, our ranking economy is zero-sum and scales heavily based on the exact OVR difference between you and your opponent.
-              </p>
-              <ul className="text-sm text-white/60 space-y-2 font-mono">
-                <li>• Victory Reward: <span className="text-emerald-400">+12 Base</span> (Scales up if the AI was stronger)</li>
-                <li>• Boss Slayer Bonus: <span className="text-yellow-400">+10 Bonus ELO</span> for breaking a Boss Match</li>
-                <li>• Defeat Penalty: <span className="text-rose-400">-15 Base</span> (Reduced slightly if the AI was much stronger)</li>
-                <li>• High-Tier Tax: <span className="text-red-500">Extra -10 Penalty</span> in Diamond+ tiers</li>
-              </ul>
-              <p className="text-xs text-white/40 mt-4 italic">Conclusion: At the highest tiers, losing carries a punishing -25 point penalty, forcing you to maintain a True Win Rate greater than 60% to climb effectively.</p>
-            </Panel>
-          </Section>
-
           <Section id="factions" title="Factions & Synergies">
             <p>Every Gigling belongs to a faction. Building around factions unlocks team synergies.</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
@@ -444,6 +365,96 @@ export default function DocsPage() {
                 </Panel>
               ))}
             </div>
+          </Section>
+
+          <Section id="battle" title="Combat System">
+            <p>
+              Combat plays out automatically over a maximum of <strong className="text-white">{BATTLE_TURN_LIMIT} turns</strong>.
+              Understanding the mathematics of the combat engine is critical to building a winning squad.
+            </p>
+
+            <Panel className="my-6">
+              <div className="font-heading font-bold text-white mb-3 text-lg">1. Turn Order (Speed)</div>
+              <p className="text-sm text-white/60 mb-3">
+                Every turn, the engine sorts all living combatants by their <strong>Effective Speed</strong>.
+                Speed determines initiative—attacking first is a massive advantage because a dead unit cannot counter-attack.
+              </p>
+              <code className="block text-sm font-mono text-white/80 bg-black/40 rounded p-3 mb-2 border border-white/5">
+                EffectiveSpeed = BaseSpeed × (1 + TraitBoost) + (Luck ÷ 10)
+              </code>
+              <p className="text-xs text-white/40 italic">Note: Luck serves as a micro-tiebreaker when Base Speeds are identical.</p>
+            </Panel>
+
+            <Panel className="my-6">
+              <div className="font-heading font-bold text-white mb-3 text-lg">2. Damage Resolution</div>
+              <p className="text-sm text-white/60 mb-3">
+                Damage is resolved using a net-difference formula. Defense directly subtracts from incoming Attack power, making highly defensive tanks very difficult to kill without raw DPS.
+              </p>
+              <code className="block text-sm font-mono text-white/80 bg-black/40 rounded p-3 mb-2 border border-white/5">
+                Damage = Math.max(1, (Attack × SpecialMultiplier) - (Defense × 0.5))
+              </code>
+              <p className="text-xs text-white/40 italic">Note: Special attacks (based on rarity) multiply the base Attack before Defense is subtracted, making them devastating.</p>
+            </Panel>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Panel>
+                <div className="font-heading font-bold text-white mb-2">3. The {BATTLE_TURN_LIMIT}-Turn Limit</div>
+                <p className="text-sm text-white/60">
+                  Battles are fast and lethal due to the {BATTLE_HEALTH_MULTIPLIER}x Health multiplier. If the battle reaches turn {BATTLE_TURN_LIMIT} without a total team wipe,
+                  the victor is decided by the highest remaining total team Health percentage.
+                </p>
+              </Panel>
+              <Panel>
+                <div className="font-heading font-bold text-white mb-2">4. Critical Hits & Luck</div>
+                <p className="text-sm text-white/60">
+                  Every card has a hidden Luck stat (1-20). The engine rolls a d20 against this stat; a success results in a Critical Hit, dealing 1.5x damage on top of the base calculation.
+                </p>
+              </Panel>
+            </div>
+          </Section>
+
+          <Section id="arenas" title="Ranked Arenas">
+            <p className="mb-4">
+              Gigling Tactics utilizes a rigorous, dynamic matchmaking engine designed to scale with your skill level and prevent easy rating inflation.
+            </p>
+
+            <div className="grid sm:grid-cols-2 gap-4 mb-6">
+              {ARENAS.map(([tier, ovr, elo]) => (
+                <Panel key={tier}>
+                  <div className="font-heading font-bold text-white mb-1">{tier} Arena</div>
+                  <div className="text-xs text-white/40 mb-1">Opponent range: <span className="font-mono text-white/70">{ovr}</span></div>
+                  <div className="text-xs text-white/40">{elo}</div>
+                </Panel>
+              ))}
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4 mb-6">
+              <Panel>
+                <div className="font-heading font-bold text-white mb-2">Smart AI Matchmaking</div>
+                <p className="text-sm text-white/60">
+                  The AI doesn't just pick random cards. It targets your team's strength, then adjusts for your recent win/loss streak—tougher foes when you're winning, easier ones when you're losing—and tightens the match band at higher ELO.
+                </p>
+              </Panel>
+              <Panel className="border-rose-500/30 bg-rose-500/5">
+                <div className="font-heading font-bold text-rose-400 mb-2">Win Streaks</div>
+                <p className="text-sm text-white/60">
+                  Sustained win streaks raise the opponent's target OVR (up to +8), so climbing requires genuinely stronger squads—not just volume.
+                </p>
+              </Panel>
+            </div>
+
+            <Panel className="my-4 border-l-4 border-l-fuchsia-500 bg-gradient-to-r from-fuchsia-500/5 to-transparent">
+              <div className="font-heading font-bold text-white mb-2 text-lg">Dynamic ELO Economy</div>
+              <p className="text-sm text-white/70 mb-3">
+                The ranking economy scales with the arena tier you fight in, rewarding climbs into higher brackets.
+              </p>
+              <ul className="text-sm text-white/60 space-y-2 font-mono">
+                <li>• Victory Reward: <span className="text-emerald-400">+15 to +30</span> (scales with arena tier)</li>
+                <li>• Defeat Penalty: <span className="text-rose-400">about half the tier's win value</span></li>
+                <li>• Draw: <span className="text-white/70">+5</span></li>
+              </ul>
+              <p className="text-xs text-white/40 mt-4 italic">Higher tiers grant bigger swings, so consistent high-tier wins climb fastest.</p>
+            </Panel>
           </Section>
 
           <Section id="roadmap" title="Roadmap">

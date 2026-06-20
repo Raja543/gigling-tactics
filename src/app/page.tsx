@@ -23,22 +23,42 @@ const fallbackFeaturedCards = [
   { id: "feat-4", giglingId: "606", name: "Swift Chobo", imageUrl: "/chobogigling.png", rarity: "LEGENDARY", faction: "CHOBO", ovr: 89, attack: 85, defense: 70, speed: 98, health: 65, luck: 75, passiveAbility: "Wind Walker", specialAbility: "Tailwind Dash", traitScore: 85, performanceScore: 88, totalRaces: 220, totalWins: 110, winRatePct: 50, elo: 1600, traits: [] }
 ];
 
+// Format a count for the stats banner: rounded down to a clean "+" figure.
+function formatStat(n: number | undefined): string {
+  if (!n || n <= 0) return "0";
+  if (n < 100) return String(n);
+  if (n < 1000) return `${Math.floor(n / 50) * 50}+`;
+  if (n < 1_000_000) return `${(Math.floor(n / 100) / 10).toFixed(1).replace(/\.0$/, "")}K+`;
+  return `${(n / 1_000_000).toFixed(1)}M+`;
+}
+
+interface SiteStats { cards: number; players: number; battles: number; factions: number; }
+
 export default function Home() {
   const [demoCards, setDemoCards] = useState(fallbackDemoCards);
   const [featuredCards, setFeaturedCards] = useState(fallbackFeaturedCards);
+  const [siteStats, setSiteStats] = useState<SiteStats | null>(null);
 
-  // Fetch real cards from API if available
+  // Fetch real top cards from the leaderboard (the API returns `cards`).
   useEffect(() => {
     fetch('/api/leaderboards')
       .then(res => res.json())
       .then(data => {
-        if (data.success && data.leaderboard && data.leaderboard.length >= 7) {
-          const cards = data.leaderboard;
+        if (data.success && Array.isArray(data.cards) && data.cards.length >= 7) {
+          const cards = data.cards.map((c: any) => ({ ...c, owner: c.user }));
           setDemoCards(cards.slice(0, 3));
           setFeaturedCards(cards.slice(3, 7));
         }
       })
       .catch(err => console.error("Failed to load real cards:", err));
+  }, []);
+
+  // Fetch real site-wide stats for the banner.
+  useEffect(() => {
+    fetch('/api/stats')
+      .then(res => res.json())
+      .then(data => { if (data.success) setSiteStats(data.stats); })
+      .catch(() => {});
   }, []);
 
   // Battle Preview Loop
@@ -139,10 +159,10 @@ export default function Home() {
         <div className="container mx-auto px-4 py-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 divide-x divide-white/5 text-center">
             {[
-              { label: "Races Synced", value: "12,450+" },
-              { label: "Cards Generated", value: "3,200+" },
-              { label: "Active Factions", value: "7" },
-              { label: "Battles Fought", value: "85,000+" }
+              { label: "Giglings", value: siteStats ? formatStat(siteStats.cards) : "…" },
+              { label: "Players", value: siteStats ? formatStat(siteStats.players) : "…" },
+              { label: "Active Factions", value: siteStats ? String(siteStats.factions) : "7" },
+              { label: "Battles Fought", value: siteStats ? formatStat(siteStats.battles) : "…" }
             ].map((stat, i) => (
               <div key={i} className="flex flex-col">
                 <span className="text-3xl md:text-4xl font-heading font-black text-white drop-shadow-md">{stat.value}</span>

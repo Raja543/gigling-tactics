@@ -654,31 +654,11 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
             </span>
           </div>
 
-          {/* Center: arena + team HP momentum + timer */}
-          <div className="flex-1 max-w-sm mx-auto text-center flex flex-col justify-center">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <span className="h-px flex-1 max-w-[40px]" style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}88)` }} />
-              <div className="text-[11px] font-black uppercase tracking-[0.2em]" style={{ color: theme.accent, textShadow: `0 0 12px ${theme.accent}66` }}>{theme.name}</div>
-              <span className="h-px flex-1 max-w-[40px]" style={{ background: `linear-gradient(90deg, ${theme.accent}88, transparent)` }} />
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 relative h-3 rounded-l-full overflow-hidden bg-black/60" style={{ border: "1px solid rgba(34,211,238,0.35)" }}>
-                <motion.div className="absolute inset-y-0 right-0" initial={false} animate={{ width: `${playerHp.pct}%` }} transition={{ duration: 0.4 }}
-                  style={{ background: "linear-gradient(90deg,#0ea5e9,#22d3ee)", boxShadow: "0 0 10px #22d3eeaa" }} />
-              </div>
-              <div className="shrink-0 px-1.5 py-0.5 rounded-md font-mono text-[10px] text-white/70 flex items-center gap-1"
-                style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <Timer size={9} /> {formatTime(elapsed)}
-              </div>
-              <div className="flex-1 relative h-3 rounded-r-full overflow-hidden bg-black/60" style={{ border: "1px solid rgba(214,51,255,0.35)" }}>
-                <motion.div className="absolute inset-y-0 left-0" initial={false} animate={{ width: `${aiHp.pct}%` }} transition={{ duration: 0.4 }}
-                  style={{ background: "linear-gradient(90deg,#d633ff,#a21caf)", boxShadow: "0 0 10px #d633ffaa" }} />
-              </div>
-            </div>
-            <div className="mt-0.5 flex items-center justify-between text-[9px] font-mono px-0.5">
-              <span className="text-cyan-300 font-bold">{Math.round(playerHp.pct)}% HP</span>
-              <span className="text-fuchsia-300 font-bold">{Math.round(aiHp.pct)}% HP</span>
-            </div>
+          {/* Center: arena name only (HP + synergy now live inside the arena) */}
+          <div className="flex-1 max-w-sm mx-auto text-center flex items-center justify-center gap-2">
+            <span className="h-px flex-1 max-w-[60px]" style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}88)` }} />
+            <div className="text-[13px] font-black uppercase tracking-[0.25em]" style={{ color: theme.accent, textShadow: `0 0 12px ${theme.accent}66` }}>{theme.name}</div>
+            <span className="h-px flex-1 max-w-[60px]" style={{ background: `linear-gradient(90deg, ${theme.accent}88, transparent)` }} />
           </div>
 
           {/* Opponent rank card */}
@@ -695,20 +675,38 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
             <RankBadge tier={aiRank.tier} subTier={aiRank.subTier} size={36} />
           </div>
         </div>
-
-        {/* synergy bars */}
-        <div className="flex items-start justify-between mt-2 gap-4">
-          <SynergyChips list={playerSynergies} color="#22d3ee" align="left" />
-          <SynergyChips list={aiSynergies} color="#d633ff" align="right" />
-        </div>
       </div>
 
       {/* ═══ BATTLEFIELD — Center Stage Duel ═══ */}
       <motion.div key={shake}
         animate={shake ? { x: [0, -8 * shakeIntensity, 8 * shakeIntensity, -5 * shakeIntensity, 5 * shakeIntensity, 0], y: [0, 3 * shakeIntensity, -3 * shakeIntensity, 0] } : {}}
         transition={{ duration: 0.4 }}
-        className="relative flex-[72] overflow-hidden flex items-center bg-cover bg-center"
+        className="relative flex-[82] overflow-hidden flex items-center bg-cover bg-center"
         style={{ backgroundImage: "url('/arena_background.png')" }}>
+
+        {/* ─── IN-ARENA HUD: team HP momentum + timer + synergies ─── */}
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 w-[min(620px,80%)] pointer-events-none">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 relative h-3.5 rounded-l-full overflow-hidden bg-black/70" style={{ border: "1px solid rgba(34,211,238,0.4)" }}>
+              <motion.div className="absolute inset-y-0 right-0" initial={false} animate={{ width: `${playerHp.pct}%` }} transition={{ duration: 0.4 }}
+                style={{ background: "linear-gradient(90deg,#0ea5e9,#22d3ee)", boxShadow: "0 0 10px #22d3eeaa" }} />
+              <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-white tabular-nums" style={{ textShadow: "0 1px 2px #000" }}>{Math.round(playerHp.pct)}%</span>
+            </div>
+            <div className="shrink-0 px-2 py-0.5 rounded-md font-mono text-[10px] text-white/80 flex items-center gap-1"
+              style={{ background: "rgba(0,0,0,0.65)", border: "1px solid rgba(255,255,255,0.1)" }}>
+              <Timer size={9} /> {formatTime(elapsed)}
+            </div>
+            <div className="flex-1 relative h-3.5 rounded-r-full overflow-hidden bg-black/70" style={{ border: "1px solid rgba(214,51,255,0.4)" }}>
+              <motion.div className="absolute inset-y-0 left-0" initial={false} animate={{ width: `${aiHp.pct}%` }} transition={{ duration: 0.4 }}
+                style={{ background: "linear-gradient(90deg,#d633ff,#a21caf)", boxShadow: "0 0 10px #d633ffaa" }} />
+              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-black text-white tabular-nums" style={{ textShadow: "0 1px 2px #000" }}>{Math.round(aiHp.pct)}%</span>
+            </div>
+          </div>
+          <div className="flex items-start justify-between mt-1.5 gap-4">
+            <SynergyChips list={playerSynergies} color="#22d3ee" align="left" />
+            <SynergyChips list={aiSynergies} color="#d633ff" align="right" />
+          </div>
+        </div>
 
         {/* ─── TACTICAL HEX GRID (very low opacity) ─── */}
         <svg className="absolute inset-0 w-full h-full z-[1] pointer-events-none" style={{ opacity: 0.07 }}>
@@ -908,8 +906,8 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
         {/* ── ACTION CALLOUT (who hits whom) ── */}
         <AnimatePresence mode="wait">
           {actionCallout && (
-            <motion.div key={`callout-${step}`} className="absolute top-[5%] left-1/2 -translate-x-1/2 z-40 pointer-events-none"
-              initial={{ opacity: 0, y: -10, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8 }}
+            <motion.div key={`callout-${step}`} className="absolute bottom-[4%] left-1/2 -translate-x-1/2 z-40 pointer-events-none"
+              initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }}
               transition={{ duration: 0.2 }}>
               <div className="flex items-center gap-2 px-4 py-1.5 rounded-full whitespace-nowrap"
                 style={{
@@ -1089,7 +1087,7 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
       </div>
 
       {/* ═══ BOTTOM PANEL: squad · log · enemy ═══ */}
-      <div className="relative z-30 shrink-0 flex-[28] min-h-0 grid grid-cols-[1fr_1.1fr_1fr] gap-px"
+      <div className="relative z-30 shrink-0 flex-[20] min-h-0 grid grid-cols-[1fr_1.1fr_1fr] gap-px"
         style={{ background: "rgba(255,255,255,0.06)", borderTop: `1px solid ${theme.accent}33` }}>
         {/* My squad */}
         <div className="flex flex-col min-h-0 p-2 pt-0" style={{ background: "#0a0a1c" }}>

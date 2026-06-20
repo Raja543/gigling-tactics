@@ -13,7 +13,7 @@ interface AIEntry {
  */
 export async function generateAITeam(
   tier: ArenaTier,
-  opts: { excludeUserId?: string; excludeCardIds?: string[]; targetOvr?: number; band?: number } = {},
+  opts: { excludeUserId?: string; excludeCardIds?: string[]; targetOvr?: number; band?: number; isBossMatch?: boolean } = {},
 ): Promise<AIEntry[]> {
   const ranges: Record<ArenaTier, [number, number]> = {
     UNRANKED: [40, 55],
@@ -45,7 +45,7 @@ export async function generateAITeam(
     const tightMax = Math.min(maxOvr, opts.targetOvr + band);
     candidates = await db.card.findMany({
       where: { ovr: { gte: tightMin, lte: tightMax }, ...exclude },
-      take: 200,
+      take: 400,
     });
   }
 
@@ -53,22 +53,52 @@ export async function generateAITeam(
   if (candidates.length < 3) {
     candidates = await db.card.findMany({
       where: { ovr: { gte: minOvr, lte: maxOvr }, ...exclude },
-      take: 200,
+      take: 400,
     });
   }
 
   // Extreme fallback
   if (candidates.length < 3) {
-    candidates = await db.card.findMany({ where: exclude, take: 200 });
+    candidates = await db.card.findMany({ where: exclude, take: 400 });
   }
   if (candidates.length < 3) {
     throw new Error('Not enough cards in database to generate an AI team. Sync the leaderboard first.');
   }
 
-  // Shuffle and pick 3, preferring same-faction if possible for synergy
-  const shuffled = [...candidates].sort(() => 0.5 - Math.random());
+  // Combat Score for AI drafting (prioritize powerful combat traits + Boss logic)
+  const traitTier = (c: Card, traitName: string) => {
+    const raw = c.rawTraits as any[];
+    if (!Array.isArray(raw)) return 0;
+    const t = raw.find((x) => (x.id || '').toLowerCase() === traitName);
+    return t ? (t.tier || 1) : 0;
+  };
   
-  // Pick the first card
+  const rarityValues: Record<string, number> = { COMMON: 1, UNCOMMON: 2, RARE: 3, EPIC: 5, LEGENDARY: 10, RELIC: 15, GIGA: 20 };
+
+  const combatScore = (c: Card) => {
+    let score = Math.random() * 10; // Base variance
+    
+    // Weight combat traits extremely highly
+    score += traitTier(c, 'surger') * 6;
+    score += traitTier(c, 'clutch') * 5;
+    score += traitTier(c, 'faction-heart') * 5;
+    score += traitTier(c, 'fast-start') * 4;
+    score += traitTier(c, 'steady') * 4;
+    score += traitTier(c, 'closer') * 3;
+    score += traitTier(c, 'volatile') * 3;
+
+    // Boss Match bias
+    if (opts.isBossMatch) {
+      score += (rarityValues[c.rarity] || 0) * 2; // Heavily prioritize rare cards
+      score += c.ovr * 0.1; // Slight nudge toward highest OVR within the band
+    }
+
+    return score;
+  };
+
+  // Sort candidates by combat score (highest first)
+  const sortedCandidates = [...candidates].sort((a, b) => combatScore(b) - combatScore(a));
+  
   const picked: Card[] = [];
   const seen = new Set<string>();
   
@@ -79,19 +109,28 @@ export async function generateAITeam(
     }
   };
 
-  for (const c of shuffled) {
+  // Pick the absolute best combat card as our anchor
+  for (const c of sortedCandidates) {
     if (picked.length === 0) {
       addCard(c);
-    } else if (picked.length < 3) {
-      // Try to find a matching faction
-      if (c.faction === picked[0].faction) {
+      break;
+    }
+  }
+
+  const anchorFaction = picked[0].faction;
+
+  // Strict Synergy Search: aggressively find 2 more cards of the SAME faction
+  if (anchorFaction && anchorFaction !== "NONE") {
+    for (const c of sortedCandidates) {
+      if (picked.length >= 3) break;
+      if (c.faction === anchorFaction) {
         addCard(c);
       }
     }
   }
 
-  // If we couldn't find 3 of the same faction, just fill the rest
-  for (const c of shuffled) {
+  // If we couldn't find 3 of the same faction, just fill the rest with top combat scores
+  for (const c of sortedCandidates) {
     if (picked.length >= 3) break;
     addCard(c);
   }

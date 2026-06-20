@@ -335,20 +335,37 @@ export default function DocsPage() {
           </Section>
 
           <Section id="arenas" title="Ranked Arenas & Matchmaking">
-            <p>
-              Gigling Tactics utilizes a rigorous ELO matchmaking system. Climbing the ladder is mathematically designed to be highly competitive and punishing.
+            <p className="mb-4">
+              Gigling Tactics utilizes a rigorous, dynamic matchmaking engine designed to scale with your skill level and prevent easy rating inflation.
             </p>
+
+            <div className="grid sm:grid-cols-2 gap-4 mb-6">
+              <Panel>
+                <div className="font-heading font-bold text-white mb-2">Smart AI Matchmaking</div>
+                <p className="text-sm text-white/60">
+                  The AI doesn't just pick random cards. It calculates the <strong>Combat Score</strong> of potential combatants, heavily favoring highly lethal traits (like Surger or Last Stand). It will also actively search the database to construct 3-card teams of the same Faction to trigger powerful Synergy bonuses against you.
+                </p>
+              </Panel>
+              <Panel className="border-rose-500/30 bg-rose-500/5">
+                <div className="font-heading font-bold text-rose-400 mb-2">Boss Battles</div>
+                <p className="text-sm text-white/60">
+                  If you achieve a win streak of 3 or more games, the Arena triggers a <strong>Boss Match</strong>. The AI will aggressively over-level its team (+15 OVR) and prioritize drafting Epic, Legendary, Relic, or Giga rarity cards. Defeating a Boss grants massive bonus ELO.
+                </p>
+              </Panel>
+            </div>
+
             <Panel className="my-4 border-l-4 border-l-fuchsia-500 bg-gradient-to-r from-fuchsia-500/5 to-transparent">
-              <div className="font-heading font-bold text-white mb-2 text-lg">Hardcore ELO Economy</div>
+              <div className="font-heading font-bold text-white mb-2 text-lg">Dynamic ELO Economy</div>
               <p className="text-sm text-white/70 mb-3">
-                Unlike casual games, our ranking economy heavily penalizes losses to prevent rating inflation. You cannot simply "grind" your way to the top with a low win-rate.
+                Unlike casual games, our ranking economy is zero-sum and scales heavily based on the exact OVR difference between you and your opponent.
               </p>
               <ul className="text-sm text-white/60 space-y-2 font-mono">
-                <li>• Victory Reward: <span className="text-emerald-400">+15 to +30 ELO</span> (Scales by Tier)</li>
-                <li>• Defeat Penalty: <span className="text-rose-400">-13 to -28 ELO</span> (Almost identical to the reward)</li>
-                <li>• Draw Outcome: <span className="text-slate-400">+5 ELO</span></li>
+                <li>• Victory Reward: <span className="text-emerald-400">+12 Base</span> (Scales up if the AI was stronger)</li>
+                <li>• Boss Slayer Bonus: <span className="text-yellow-400">+10 Bonus ELO</span> for breaking a Boss Match</li>
+                <li>• Defeat Penalty: <span className="text-rose-400">-15 Base</span> (Reduced slightly if the AI was much stronger)</li>
+                <li>• High-Tier Tax: <span className="text-red-500">Extra -10 Penalty</span> in Diamond+ tiers</li>
               </ul>
-              <p className="text-xs text-white/40 mt-4 italic">Conclusion: You must maintain a True Win Rate greater than 50% to climb effectively.</p>
+              <p className="text-xs text-white/40 mt-4 italic">Conclusion: At the highest tiers, losing carries a punishing -25 point penalty, forcing you to maintain a True Win Rate greater than 60% to climb effectively.</p>
             </Panel>
           </Section>
 

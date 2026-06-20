@@ -53,8 +53,9 @@ export async function POST(request: Request) {
       else if (b.result === 'LOSS') { if (streak <= 0) streak--; else break; }
       else break;
     }
-    // Win streak -> tougher foes; loss streak -> easier. Capped at +/-8 OVR.
-    const streakAdj = Math.max(-8, Math.min(8, streak * 2));
+    
+    const isBossMatch = streak >= 3;
+    const streakAdj = isBossMatch ? 12 + Math.min(8, streak) : Math.max(-8, Math.min(6, streak * 2));
     const variance = Math.floor(Math.random() * 5) - 2; // +/-2 jitter
     const targetOvr = Math.max(40, Math.min(99, playerOvrAvg + streakAdj + variance));
     // Tighter matchmaking at higher ELO (skilled players get fairer fights).
@@ -65,6 +66,7 @@ export async function POST(request: Request) {
       excludeCardIds: playerCards.map((c) => c.id),
       targetOvr,
       band,
+      isBossMatch,
     });
     const aiCards = aiTeamEntries.map((e) => e.card);
 
@@ -73,10 +75,26 @@ export async function POST(request: Request) {
     const finalState = engine.simulateBattle();
     const { playerDamageDealt, playerDamageTaken, mvp, result, turn } = finalState;
 
-    // 4. ELO change scales with arena tier (plan §4.10).
-    const baseEloChange = arenaTier === 'LEGEND' ? 30 : arenaTier === 'GOLD' ? 25 : arenaTier === 'SILVER' ? 20 : 15;
-    const lossPenalty = Math.max(10, baseEloChange - 2); // Harsh penalty for loss
-    const eloChange = result === 'WIN' ? baseEloChange : result === 'LOSS' ? -lossPenalty : 5;
+    // 4. Dynamic ELO Calculation based on OVR Difference
+    const aiOvrAvg = Math.floor(aiCards.reduce((sum, c) => sum + c.ovr, 0) / aiCards.length);
+    const ovrDiff = aiOvrAvg - playerOvrAvg; // Positive if AI is stronger
+
+    let eloChange = 0;
+    if (result === 'WIN') {
+      eloChange = 12 + Math.floor(ovrDiff / 2); // Base 12, scaling up if beating stronger AI
+      if (eloChange < 5) eloChange = 5;
+      if (isBossMatch) eloChange += 10; // Bonus for Boss slay
+    } else if (result === 'LOSS') {
+      let eloLoss = 15 - Math.floor(ovrDiff / 2); // Base 15 penalty, reduced if AI was much stronger
+      // Top tiers demand >60% win rate to climb
+      if (['DIAMOND', 'LEGEND', 'IMMORTAL', 'RADIANT', 'ASCENDANT'].includes(arenaTier)) {
+        eloLoss += 10;
+      }
+      if (eloLoss < 8) eloLoss = 8;
+      eloChange = -eloLoss;
+    } else {
+      eloChange = 5; // Draw
+    }
 
     // 5. Persist the battle + log.
     const battle = await db.battle.create({

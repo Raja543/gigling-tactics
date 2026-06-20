@@ -30,9 +30,9 @@ interface Fighter {
 }
 
 const SPEEDS = [
-  { label: "Slow", ms: 1400 },
-  { label: "Normal", ms: 800 },
-  { label: "Fast", ms: 450 },
+  { label: "Slow", ms: 2600 },
+  { label: "Normal", ms: 1800 },
+  { label: "Fast", ms: 1100 },
 ];
 
 const CLASS_COLOR: Record<UnitClass, string> = {
@@ -195,7 +195,7 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(true);
-  const [speedMs, setSpeedMs] = useState(800); // Normal: snappy by default
+  const [speedMs, setSpeedMs] = useState(1800); // Normal: each attack fully resolves before the next
   const [shake, setShake] = useState(0);
   const [shakeIntensity, setShakeIntensity] = useState(1);
   const [elapsed, setElapsed] = useState(0);
@@ -295,6 +295,27 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
   const abilityName = actorFighter ? getAbilityName(actorFighter.card) : "";
   const showCrit = !!curLog?.isCritical && !!curLog?.damage;
 
+  // Always-visible action callout: who is acting on whom this step.
+  const actionCallout = useMemo(() => {
+    if (!curLog || !curLog.actorName) return null;
+    const actorIsPlayer = playerTeam.some((p) => p.name === curLog.actorName);
+    if (curLog.actionType === "HEAL") return { actor: curLog.actorName, verb: "heals", target: curLog.actorName, actorIsPlayer, tone: "heal" as const };
+    if (curLog.actionType === "DEFEATED") return null;
+    if (!curLog.targetName) return null;
+    if (curLog.damage) return { actor: curLog.actorName, verb: curLog.actionType === "SPECIAL" ? "unleashes on" : curLog.isCritical ? "crits" : "strikes", target: curLog.targetName, actorIsPlayer, tone: curLog.isCritical ? "crit" as const : "hit" as const };
+    if (curLog.actionType === "ATTACK") return { actor: curLog.actorName, verb: "misses", target: curLog.targetName, actorIsPlayer, tone: "miss" as const };
+    return null;
+  }, [curLog, playerTeam]);
+
+  // Real upcoming attacker (the next log entry's actor).
+  const nextActor = useMemo(() => {
+    const nl = logs[step];
+    if (!nl?.actorName) return null;
+    const f = [...playerTeam, ...aiTeam].find((x) => x.name === nl.actorName);
+    if (!f) return null;
+    return { name: nl.actorName, isPlayer: playerTeam.some((p) => p.name === nl.actorName) };
+  }, [logs, step, playerTeam, aiTeam]);
+
   // Combo: streak of consecutive landed hits (a miss/dodge breaks it).
   const combo = useMemo(() => {
     let c = 0;
@@ -386,15 +407,25 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
   const playerHp = teamHp(playerTeam);
   const aiHp = teamHp(aiTeam);
 
-  // ── 1v1 Queue: alive fighters ──
+  // ── Center stage shows the ACTUAL participants of the current action ──
+  // (the engine lets every unit act each round, so we must spotlight whoever
+  // is attacking and whoever is being hit — not just the front of the queue).
   const alivePlayer = playerTeam.filter(f => !deadByName[f.name]);
   const aliveAI = aiTeam.filter(f => !deadByName[f.name]);
-  // The "active" fighter is the front of the queue
-  const activePlayerFighter = alivePlayer[0] ?? null;
-  const activeAIFighter = aliveAI[0] ?? null;
-  // Bench = everyone except the active fighter
-  const playerBench = alivePlayer.slice(1);
-  const aiBench = aliveAI.slice(1);
+
+  const stepActorF = (activeActor && [...playerTeam, ...aiTeam].find(f => f.name === activeActor)) || null;
+  const stepTargetF = (activeTarget && [...playerTeam, ...aiTeam].find(f => f.name === activeTarget)) || null;
+  const onPlayer = (f: Fighter | null) => !!f && playerTeam.some(p => p.name === f.name);
+
+  // Player-side slot = the player unit involved this step; AI-side slot likewise.
+  const activePlayerFighter =
+    (onPlayer(stepActorF) ? stepActorF : onPlayer(stepTargetF) ? stepTargetF : null) ?? alivePlayer[0] ?? null;
+  const activeAIFighter =
+    (!onPlayer(stepActorF) && stepActorF ? stepActorF : !onPlayer(stepTargetF) && stepTargetF ? stepTargetF : null) ?? aliveAI[0] ?? null;
+
+  // Bench = remaining alive units that aren't on center stage.
+  const playerBench = alivePlayer.filter(f => f.name !== activePlayerFighter?.name);
+  const aiBench = aliveAI.filter(f => f.name !== activeAIFighter?.name);
 
   // ── Turn order (next attackers based on speed) ──
   const turnOrder = useMemo(() => {
@@ -424,23 +455,74 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
     </div>
   );
 
-  // ── Bench card (small, dimmed) ──
-  const renderBenchCard = (f: Fighter, side: "player" | "ai") => (
-    <motion.div
-      key={f.id}
-      layout
-      initial={{ opacity: 0, scale: 0.6, y: 20 }}
-      animate={{ opacity: 0.75, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.4, y: -30 }}
-      transition={{ type: "spring", stiffness: 250, damping: 22 }}
-      className="relative"
-    >
-      <ClashCard card={f.card} side={side} maxHealth={f.maxHp}
-        currentHealth={hpByName[f.name] ?? f.maxHp} isDead={false}
-        event={null} scale={0.75}
-        isActor={false} isTarget={false} />
-    </motion.div>
-  );
+  // ── Bench card (small, dimmed, gently breathing) ──
+  const renderBenchCard = (f: Fighter, side: "player" | "ai", idx: number) => {
+    const col = side === "player" ? "rgba(34,211,238," : "rgba(214,51,255,";
+    return (
+      <motion.div
+        key={f.id}
+        layout
+        initial={{ opacity: 0, scale: 0.6, y: 20 }}
+        animate={{ opacity: 0.78, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.4, y: -30 }}
+        transition={{ type: "spring", stiffness: 250, damping: 22 }}
+        className="relative"
+      >
+        {/* soft idle glow pulse */}
+        <motion.div className="absolute -inset-2 rounded-2xl pointer-events-none -z-10"
+          animate={{ opacity: [0.15, 0.35, 0.15] }}
+          transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut", delay: idx * 0.5 }}
+          style={{ background: `radial-gradient(ellipse, ${col}0.18), transparent 70%)`, filter: "blur(8px)" }} />
+        {/* breathing + hover drift */}
+        <motion.div
+          animate={{ y: [0, -4, 0], scale: [1, 1.012, 1] }}
+          transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut", delay: idx * 0.4 }}
+        >
+          <ClashCard card={f.card} side={side} maxHealth={f.maxHp}
+            currentHealth={hpByName[f.name] ?? f.maxHp} isDead={false}
+            event={null} scale={0.62}
+            isActor={false} isTarget={false} />
+        </motion.div>
+      </motion.div>
+    );
+  };
+
+  // ── Formation slot: a fixed bay per team member. Holds the bench card, or an
+  //    empty slot when the unit is fighting at center / has been eliminated. ──
+  const renderFormationSlot = (f: Fighter, side: "player" | "ai", idx: number) => {
+    const dead = !!deadByName[f.name];
+    const onStage = (side === "player" ? activePlayerFighter : activeAIFighter)?.name === f.name;
+    const col = side === "player" ? "#22d3ee" : "#d633ff";
+    return (
+      <div key={f.id} className="relative flex items-center justify-center" style={{ width: 84, height: 132 }}>
+        {/* slot base */}
+        <div className="absolute inset-0 rounded-xl"
+          style={{
+            border: `1px dashed ${dead ? "rgba(255,71,87,0.3)" : `${col}55`}`,
+            background: dead ? "rgba(255,71,87,0.04)" : `${col}0a`,
+            boxShadow: dead ? "none" : `inset 0 0 12px ${col}14`,
+          }} />
+        {/* slot index tab */}
+        <span className="absolute -top-1.5 left-1.5 z-10 text-[7px] font-black uppercase tracking-widest px-1 rounded"
+          style={{ background: "#0a0a1c", color: dead ? "rgba(255,71,87,0.6)" : `${col}aa` }}>
+          {dead ? "KO" : `S${idx + 1}`}
+        </span>
+        {dead && <Skull size={20} className="text-red-500/40" />}
+        {!dead && !onStage && (
+          <AnimatePresence mode="popLayout">
+            {renderBenchCard(f, side, idx)}
+          </AnimatePresence>
+        )}
+        {/* on-stage marker: this unit is at center */}
+        {!dead && onStage && (
+          <motion.div className="text-[7px] font-bold uppercase tracking-widest"
+            style={{ color: `${col}99` }} animate={{ opacity: [0.4, 0.9, 0.4] }} transition={{ duration: 1.6, repeat: Infinity }}>
+            In Combat
+          </motion.div>
+        )}
+      </div>
+    );
+  };
 
   // ── Active fighter (large, center stage) ──
   const renderActiveCard = (f: Fighter | null, side: "player" | "ai") => {
@@ -488,7 +570,7 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
           
         <ClashCard card={f.card} side={side} maxHealth={f.maxHp}
           currentHealth={hpByName[f.name] ?? f.maxHp} isDead={!!deadByName[f.name]}
-          event={ev} scale={1.5}
+          event={ev} scale={1.2}
           isActor={isActing} isTarget={isBeingHit} />
       </motion.div>
     );
@@ -555,57 +637,67 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
       `}</style>
 
       {/* ═══ TOP RANK BAR ═══ */}
-      <div className="relative z-30 shrink-0 px-4 py-2"
-        style={{ background: "linear-gradient(180deg, #16162e, #0b0b1c)", borderBottom: `1px solid ${theme.accent}33` }}>
-        <div className="flex items-center justify-between">
-          {/* Player */}
-          <div className="flex items-center gap-2.5">
-            <RankBadge tier={playerRank.tier} subTier={playerRank.subTier} size={34} />
+      <div className="relative z-30 shrink-0 px-4 py-2.5"
+        style={{ background: "linear-gradient(180deg, #1a1a36, #0b0b1c)", borderBottom: `1px solid ${theme.accent}44`, boxShadow: `0 4px 16px rgba(0,0,0,0.4)` }}>
+        <div className="flex items-stretch justify-between gap-3">
+          {/* Player rank card */}
+          <div className="flex items-center gap-2.5 rounded-xl px-3 py-1.5"
+            style={{ background: "linear-gradient(135deg, rgba(34,211,238,0.12), transparent)", border: "1px solid rgba(34,211,238,0.25)" }}>
+            <RankBadge tier={playerRank.tier} subTier={playerRank.subTier} size={36} />
             <div className="leading-tight">
               <div className="text-[9px] uppercase tracking-widest text-white/40">You</div>
               <div className="text-sm font-bold" style={{ color: playerRank.color }}>{playerRank.label}</div>
             </div>
-            <span className="ml-2 flex items-center gap-1 text-xs font-bold text-white tabular-nums">
-              <Shield size={12} style={{ color: playerFaction.color }} /> {alivePlayer.length}
+            <span className="ml-1 flex items-center gap-1 text-sm font-black text-white tabular-nums px-2 py-0.5 rounded-lg"
+              style={{ background: "rgba(0,0,0,0.4)" }}>
+              <Shield size={13} style={{ color: playerFaction.color }} /> {alivePlayer.length}
             </span>
           </div>
 
           {/* Center: arena + team HP momentum + timer */}
-          <div className="absolute left-1/2 -translate-x-1/2 text-center w-72">
-            <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: theme.accent }}>{theme.name}</div>
-            <div className="mt-1 flex items-center gap-1.5">
-              <div className="flex-1 relative h-2.5 rounded-l-full overflow-hidden bg-black/60" style={{ border: "1px solid rgba(34,211,238,0.3)" }}>
+          <div className="flex-1 max-w-sm mx-auto text-center flex flex-col justify-center">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <span className="h-px flex-1 max-w-[40px]" style={{ background: `linear-gradient(90deg, transparent, ${theme.accent}88)` }} />
+              <div className="text-[11px] font-black uppercase tracking-[0.2em]" style={{ color: theme.accent, textShadow: `0 0 12px ${theme.accent}66` }}>{theme.name}</div>
+              <span className="h-px flex-1 max-w-[40px]" style={{ background: `linear-gradient(90deg, ${theme.accent}88, transparent)` }} />
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 relative h-3 rounded-l-full overflow-hidden bg-black/60" style={{ border: "1px solid rgba(34,211,238,0.35)" }}>
                 <motion.div className="absolute inset-y-0 right-0" initial={false} animate={{ width: `${playerHp.pct}%` }} transition={{ duration: 0.4 }}
-                  style={{ background: "linear-gradient(90deg,#0ea5e9,#22d3ee)", boxShadow: "0 0 8px #22d3ee88" }} />
+                  style={{ background: "linear-gradient(90deg,#0ea5e9,#22d3ee)", boxShadow: "0 0 10px #22d3eeaa" }} />
               </div>
-              <Timer size={9} className="text-white/30 shrink-0" />
-              <div className="flex-1 relative h-2.5 rounded-r-full overflow-hidden bg-black/60" style={{ border: "1px solid rgba(214,51,255,0.3)" }}>
+              <div className="shrink-0 px-1.5 py-0.5 rounded-md font-mono text-[10px] text-white/70 flex items-center gap-1"
+                style={{ background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <Timer size={9} /> {formatTime(elapsed)}
+              </div>
+              <div className="flex-1 relative h-3 rounded-r-full overflow-hidden bg-black/60" style={{ border: "1px solid rgba(214,51,255,0.35)" }}>
                 <motion.div className="absolute inset-y-0 left-0" initial={false} animate={{ width: `${aiHp.pct}%` }} transition={{ duration: 0.4 }}
-                  style={{ background: "linear-gradient(90deg,#d633ff,#a21caf)", boxShadow: "0 0 8px #d633ff88" }} />
+                  style={{ background: "linear-gradient(90deg,#d633ff,#a21caf)", boxShadow: "0 0 10px #d633ffaa" }} />
               </div>
             </div>
-            <div className="mt-0.5 flex items-center justify-between text-[9px] font-mono">
+            <div className="mt-0.5 flex items-center justify-between text-[9px] font-mono px-0.5">
               <span className="text-cyan-300 font-bold">{Math.round(playerHp.pct)}% HP</span>
-              <span className="text-white/40">{formatTime(elapsed)}</span>
               <span className="text-fuchsia-300 font-bold">{Math.round(aiHp.pct)}% HP</span>
             </div>
           </div>
 
-          {/* Opponent */}
-          <div className="flex items-center gap-2.5">
-            <span className="mr-1 flex items-center gap-1 text-xs font-bold text-white tabular-nums">
-              {aliveAI.length} <Zap size={12} style={{ color: aiFaction.color }} />
+          {/* Opponent rank card */}
+          <div className="flex items-center gap-2.5 rounded-xl px-3 py-1.5"
+            style={{ background: "linear-gradient(225deg, rgba(214,51,255,0.12), transparent)", border: "1px solid rgba(214,51,255,0.25)" }}>
+            <span className="mr-0.5 flex items-center gap-1 text-sm font-black text-white tabular-nums px-2 py-0.5 rounded-lg"
+              style={{ background: "rgba(0,0,0,0.4)" }}>
+              {aliveAI.length} <Zap size={13} style={{ color: aiFaction.color }} />
             </span>
             <div className="leading-tight text-right">
               <div className="text-[9px] uppercase tracking-widest text-white/40">Opponent · OVR {aiAvgOvr}</div>
               <div className="text-sm font-bold" style={{ color: aiRank.color }}>{aiRank.label}</div>
             </div>
-            <RankBadge tier={aiRank.tier} subTier={aiRank.subTier} size={34} />
+            <RankBadge tier={aiRank.tier} subTier={aiRank.subTier} size={36} />
           </div>
         </div>
 
         {/* synergy bars */}
-        <div className="flex items-start justify-between mt-1.5 gap-4">
+        <div className="flex items-start justify-between mt-2 gap-4">
           <SynergyChips list={playerSynergies} color="#22d3ee" align="left" />
           <SynergyChips list={aiSynergies} color="#d633ff" align="right" />
         </div>
@@ -617,6 +709,47 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
         transition={{ duration: 0.4 }}
         className="relative flex-[72] overflow-hidden flex items-center bg-cover bg-center"
         style={{ backgroundImage: "url('/arena_background.png')" }}>
+
+        {/* ─── TACTICAL HEX GRID (very low opacity) ─── */}
+        <svg className="absolute inset-0 w-full h-full z-[1] pointer-events-none" style={{ opacity: 0.07 }}>
+          <defs>
+            <pattern id="clash-hex" width="56" height="48" patternUnits="userSpaceOnUse" patternTransform="scale(1)">
+              <path d="M14 0 L42 0 L56 24 L42 48 L14 48 L0 24 Z" fill="none" stroke={theme.accent} strokeWidth="1" />
+            </pattern>
+            <radialGradient id="clash-hex-fade" cx="50%" cy="48%" r="60%">
+              <stop offset="0%" stopColor="white" stopOpacity="1" />
+              <stop offset="100%" stopColor="white" stopOpacity="0" />
+            </radialGradient>
+            <mask id="clash-hex-mask"><rect width="100%" height="100%" fill="url(#clash-hex-fade)" /></mask>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#clash-hex)" mask="url(#clash-hex-mask)" />
+        </svg>
+
+        {/* ─── DECORATIVE ARENA FRAME ─── */}
+        <div className="absolute inset-2 sm:inset-3 z-[25] pointer-events-none rounded-xl"
+          style={{ border: `1.5px solid ${theme.accent}55`, boxShadow: `inset 0 0 40px ${theme.accent}1a, inset 0 0 4px ${theme.accent}33` }}>
+          {/* paneled tick marks along top & bottom edges */}
+          <div className="absolute -top-px left-6 right-6 h-[3px] flex justify-between opacity-70">
+            {[...Array(20)].map((_, i) => (
+              <span key={`t${i}`} style={{ width: 8, height: 3, background: i % 2 ? `${theme.accent}88` : `${theme.accent}22` }} />
+            ))}
+          </div>
+          <div className="absolute -bottom-px left-6 right-6 h-[3px] flex justify-between opacity-70">
+            {[...Array(20)].map((_, i) => (
+              <span key={`b${i}`} style={{ width: 8, height: 3, background: i % 2 ? `${theme.accent}88` : `${theme.accent}22` }} />
+            ))}
+          </div>
+          {/* glowing corner brackets */}
+          {[
+            "top-0 left-0 border-t-2 border-l-2 rounded-tl-xl",
+            "top-0 right-0 border-t-2 border-r-2 rounded-tr-xl",
+            "bottom-0 left-0 border-b-2 border-l-2 rounded-bl-xl",
+            "bottom-0 right-0 border-b-2 border-r-2 rounded-br-xl",
+          ].map((pos, i) => (
+            <div key={i} className={`absolute w-7 h-7 ${pos}`}
+              style={{ borderColor: theme.accent, filter: `drop-shadow(0 0 5px ${theme.accent})` }} />
+          ))}
+        </div>
 
         {/* ─── RICH ARENA BACKGROUND ─── */}
 
@@ -772,6 +905,30 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
           )}
         </AnimatePresence>
 
+        {/* ── ACTION CALLOUT (who hits whom) ── */}
+        <AnimatePresence mode="wait">
+          {actionCallout && (
+            <motion.div key={`callout-${step}`} className="absolute top-[5%] left-1/2 -translate-x-1/2 z-40 pointer-events-none"
+              initial={{ opacity: 0, y: -10, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}>
+              <div className="flex items-center gap-2 px-4 py-1.5 rounded-full whitespace-nowrap"
+                style={{
+                  background: "rgba(5,5,18,0.85)",
+                  border: `1px solid ${actionCallout.tone === "crit" ? "#f7c948" : actionCallout.tone === "miss" ? "#64748b" : actionCallout.tone === "heal" ? "#22c55e" : `${theme.accent}66`}`,
+                  boxShadow: `0 0 18px ${actionCallout.tone === "crit" ? "#f7c94855" : "rgba(0,0,0,0.6)"}`,
+                  backdropFilter: "blur(6px)",
+                }}>
+                <span className="text-sm font-black" style={{ color: actionCallout.actorIsPlayer ? "#22d3ee" : "#d633ff" }}>{actionCallout.actor}</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider"
+                  style={{ color: actionCallout.tone === "crit" ? "#f7c948" : actionCallout.tone === "miss" ? "#94a3b8" : actionCallout.tone === "heal" ? "#4ade80" : "#fff" }}>
+                  {actionCallout.verb}
+                </span>
+                <span className="text-sm font-black" style={{ color: actionCallout.target === actionCallout.actor ? (actionCallout.actorIsPlayer ? "#22d3ee" : "#d633ff") : actionCallout.actorIsPlayer ? "#d633ff" : "#22d3ee" }}>{actionCallout.target}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* ── COMBO counter (top-right) ── */}
         <AnimatePresence>
           {showCombo && (
@@ -832,13 +989,11 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
           )}
         </AnimatePresence>
 
-        {/* ═══ 3-ZONE LAYOUT ═══ */}
+        {/* ═══ 3-ZONE LAYOUT (formation slots · center stage · formation slots) ═══ */}
 
-        {/* Player BENCH (far left) */}
-        <div className="relative z-10 w-[20%] flex flex-col items-center justify-center gap-2 px-1">
-          <AnimatePresence mode="popLayout">
-            {playerBench.map(f => renderBenchCard(f, "player"))}
-          </AnimatePresence>
+        {/* Player FORMATION (far left) */}
+        <div className="relative z-10 w-[20%] flex flex-col items-center justify-center gap-3 px-1">
+          {playerTeam.map((f, i) => renderFormationSlot(f, "player", i))}
         </div>
 
         {/* CENTER STAGE (60% — the duel zone) */}
@@ -858,11 +1013,9 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
           </div>
         </div>
 
-        {/* AI BENCH (far right) */}
-        <div className="relative z-10 w-[20%] flex flex-col items-center justify-center gap-2 px-1">
-          <AnimatePresence mode="popLayout">
-            {aiBench.map(f => renderBenchCard(f, "ai"))}
-          </AnimatePresence>
+        {/* AI FORMATION (far right) */}
+        <div className="relative z-10 w-[20%] flex flex-col items-center justify-center gap-3 px-1">
+          {aiTeam.map((f, i) => renderFormationSlot(f, "ai", i))}
         </div>
       </motion.div>
 
@@ -877,16 +1030,23 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
           </span>
         </div>
 
-        {/* Turn order preview */}
-        <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg" style={{ background: "rgba(20,20,50,0.6)", border: "1px solid rgba(255,255,255,0.06)" }}>
-          <span className="text-[9px] uppercase tracking-widest text-white/30 font-bold mr-1">Next</span>
-          {turnOrder.slice(0, 3).map((f, i) => {
+        {/* Turn preview: the actual next attacker + speed-order queue */}
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-lg" style={{ background: "rgba(20,20,50,0.6)", border: "1px solid rgba(255,255,255,0.06)" }}>
+          {nextActor ? (
+            <span className="flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded"
+              style={{ background: `${nextActor.isPlayer ? "#22d3ee" : "#d633ff"}22`, border: `1px solid ${nextActor.isPlayer ? "#22d3ee" : "#d633ff"}66`, color: nextActor.isPlayer ? "#22d3ee" : "#d633ff" }}>
+              <span className="text-[8px] uppercase tracking-widest opacity-60">Next</span> {nextActor.name}
+            </span>
+          ) : (
+            <span className="text-[9px] uppercase tracking-widest text-white/30 font-bold">Initiative</span>
+          )}
+          <span className="text-white/15">|</span>
+          {turnOrder.slice(0, 3).map((f) => {
             const isPlayer = playerTeam.some(p => p.name === f.name);
             const col = isPlayer ? "#22d3ee" : "#d633ff";
             return (
-              <span key={f.id} className="flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded"
-                style={{ background: `${col}15`, border: `1px solid ${col}33`, color: col }}>
-                {i + 1}. {f.name.split(" ").pop()} <span className="text-white/30 text-[7px]">S{f.card.speed}</span>
+              <span key={f.id} className="flex items-center gap-1 text-[8px] font-bold" style={{ color: `${col}aa` }}>
+                {f.name.split(" ").pop()}<span className="text-white/25 text-[7px]">S{f.card.speed}</span>
               </span>
             );
           })}
@@ -932,8 +1092,9 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
       <div className="relative z-30 shrink-0 flex-[28] min-h-0 grid grid-cols-[1fr_1.1fr_1fr] gap-px"
         style={{ background: "rgba(255,255,255,0.06)", borderTop: `1px solid ${theme.accent}33` }}>
         {/* My squad */}
-        <div className="flex flex-col min-h-0 p-2" style={{ background: "#0a0a1c" }}>
-          <div className="flex items-center gap-1.5 mb-1.5 shrink-0">
+        <div className="flex flex-col min-h-0 p-2 pt-0" style={{ background: "#0a0a1c" }}>
+          <div className="flex items-center gap-1.5 px-2 py-1.5 mb-1.5 shrink-0 rounded-b-lg"
+            style={{ background: "linear-gradient(180deg, rgba(34,211,238,0.15), transparent)", borderBottom: "1px solid rgba(34,211,238,0.3)" }}>
             <Shield size={12} className="text-cyan-300" />
             <span className="text-[10px] font-black uppercase tracking-widest text-cyan-300">My Squad</span>
           </div>
@@ -942,9 +1103,10 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
 
         {/* Battle log */}
         <div className="flex flex-col min-h-0" style={{ background: "#080814" }}>
-          <div className="flex items-center justify-center gap-1.5 py-1.5 shrink-0 border-b border-white/5">
-            <ScrollText size={12} className="text-white/50" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Battle Log</span>
+          <div className="flex items-center justify-center gap-1.5 py-1.5 shrink-0"
+            style={{ background: `linear-gradient(180deg, ${theme.accent}1a, transparent)`, borderBottom: `1px solid ${theme.accent}33` }}>
+            <ScrollText size={12} style={{ color: theme.accent }} />
+            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: theme.accent }}>Battle Log</span>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
             <BattleLog logs={logs} visibleCount={step} />
@@ -952,8 +1114,9 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
         </div>
 
         {/* Enemy squad */}
-        <div className="flex flex-col min-h-0 p-2" style={{ background: "#0a0a1c" }}>
-          <div className="flex items-center justify-end gap-1.5 mb-1.5 shrink-0">
+        <div className="flex flex-col min-h-0 p-2 pt-0" style={{ background: "#0a0a1c" }}>
+          <div className="flex items-center justify-end gap-1.5 px-2 py-1.5 mb-1.5 shrink-0 rounded-b-lg"
+            style={{ background: "linear-gradient(180deg, rgba(214,51,255,0.15), transparent)", borderBottom: "1px solid rgba(214,51,255,0.3)" }}>
             <span className="text-[10px] font-black uppercase tracking-widest text-fuchsia-300">Enemy (AI)</span>
             <Zap size={12} className="text-fuchsia-300" />
           </div>

@@ -19,6 +19,7 @@ import type { CardDisplay as CardType } from "@/types/card";
 import { useCollection } from "@/hooks/useCards";
 import { useDecks } from "@/hooks/useDecks";
 import { TeamPower } from "@/components/team/TeamPower";
+import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
 
 export default function TeamBuilderPage() {
   const { address } = useWallet();
@@ -169,6 +170,11 @@ export default function TeamBuilderPage() {
           <SynergyDisplay />
         </div>
       </div>
+
+      {/* Onboarding hint when the player has cards but no saved teams yet */}
+      {!decksLoading && decks.length === 0 && collection.length > 0 && (
+        <OnboardingChecklist connected={!!address} hasCards={collection.length > 0} hasTeam={false} className="mt-12 max-w-xl" />
+      )}
 
       {/* Saved decks */}
       <div className="mt-12">

@@ -8,6 +8,7 @@ import { Select } from "@/components/ui/Select";
 import { calculateRank } from "@/engine/ranking";
 import { Shield, Swords, AlertCircle, Info } from "lucide-react";
 import { RankBadge } from "@/components/ui/RankBadge";
+import { useToast } from "@/components/ui/Toast";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 
@@ -18,6 +19,7 @@ import { Trophy, Flame, Crown, Star, Zap } from "lucide-react";
 export default function ArenaPage() {
   const { address } = useWallet();
   const { decks, isLoading } = useDecks(address);
+  const toast = useToast();
 
   const [selectedDeckId, setSelectedDeckId] = useState<string>("");
   const [isStarting, setIsStarting] = useState(false);
@@ -62,7 +64,7 @@ export default function ArenaPage() {
       const res = await fetch("/api/battles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deckId: selectedDeckId, arenaTier: rank?.tier ?? "IRON" }),
+        body: JSON.stringify({ deckId: selectedDeckId, walletAddress: address, arenaTier: rank?.tier ?? "IRON" }),
       });
       const data = await res.json();
       if (data.success) {
@@ -75,11 +77,11 @@ export default function ArenaPage() {
           totalBattles: data.totalBattles,
         });
       } else {
-        alert("Failed to start battle: " + data.error);
+        toast.error("Failed to start battle: " + (data.error || "Unknown error"));
       }
     } catch (error) {
       console.error(error);
-      alert("Network error starting battle");
+      toast.error("Network error starting battle.");
     } finally {
       setIsStarting(false);
     }

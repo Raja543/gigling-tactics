@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Pause, Play, FastForward, SkipForward, ScrollText, Shield, Zap, Timer, Sparkles, Crown, Skull } from "lucide-react";
+import { Pause, Play, FastForward, SkipForward, ScrollText, Shield, Zap, Timer, Sparkles, Crown, Skull, Volume2, VolumeX } from "lucide-react";
+import { useBattleSound } from "@/lib/useBattleSound";
 import { ClashCard, type FighterEvent } from "./ClashCard";
 import { BattleLog } from "./BattleLog";
 import { BattleResult } from "./BattleResult";
@@ -204,10 +205,11 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
 
   const [showResult, setShowResult] = useState(false);
   const [showSplash, setShowSplash] = useState(false);
+  const sound = useBattleSound();
   const [roundMvp, setRoundMvp] = useState<{ seq: number; name: string; dmg: number; round: number } | null>(null);
   const prevTurnRef = useRef(0);
 
-  // Screen shake + KO detection
+  // Screen shake + KO detection (+ sound cues)
   useEffect(() => {
     const l = logs[step - 1];
     if (!l) return;
@@ -215,18 +217,29 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
       setShakeIntensity(1.8);
       setShake((n) => n + 1);
       if (l.actorName) setKo({ seq: step, name: l.actorName });
-    } else if (l.isCritical || l.actionType === "SPECIAL") {
+      sound.play("ko");
+    } else if (l.isCritical) {
       setShakeIntensity(1.2);
       setShake((n) => n + 1);
       setShowImpact(true);
       setTimeout(() => setShowImpact(false), 500);
+      sound.play("crit");
+    } else if (l.actionType === "SPECIAL") {
+      setShakeIntensity(1.2);
+      setShake((n) => n + 1);
+      setShowImpact(true);
+      setTimeout(() => setShowImpact(false), 500);
+      sound.play("special");
+    } else if (l.actionType === "HEAL" && l.healing) {
+      sound.play("heal");
     } else if (l.damage) {
       setShakeIntensity(0.4);
       setShake((n) => n + 1);
       setShowImpact(true);
       setTimeout(() => setShowImpact(false), 400);
+      sound.play("hit");
     }
-  }, [step, logs]);
+  }, [step, logs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!ko) return;
@@ -258,10 +271,13 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
   // Victory sequence: final KO settles -> VICTORY/DEFEAT splash -> result screen.
   useEffect(() => {
     if (!started || !finished) return;
-    const t1 = setTimeout(() => setShowSplash(true), 900);
+    const t1 = setTimeout(() => {
+      setShowSplash(true);
+      sound.play(battleData.result === "WIN" ? "victory" : "defeat");
+    }, 900);
     const t2 = setTimeout(() => { setShowSplash(false); setShowResult(true); }, 2500);
     return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [started, finished]);
+  }, [started, finished]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-advance step (stops when finished)
   useEffect(() => {
@@ -1052,6 +1068,11 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
 
         {/* Playback controls */}
         <div className="flex items-center gap-2">
+          <button onClick={sound.toggle} title={sound.enabled ? "Mute" : "Sound on"}
+            className="w-9 h-9 rounded-xl flex items-center justify-center hover:scale-105 transition-transform"
+            style={{ background: sound.enabled ? "rgba(168,85,247,0.2)" : "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            {sound.enabled ? <Volume2 size={15} className="text-primary" /> : <VolumeX size={15} className="text-white/50" />}
+          </button>
           {!finished && (
             <button onClick={() => setPlaying((p) => !p)}
               className="w-10 h-10 rounded-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
@@ -1206,6 +1227,21 @@ export function ClashArena({ battleData, onExit }: ClashArenaProps) {
             <motion.div className="absolute inset-0 z-[55] flex items-center justify-center pointer-events-none overflow-hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" />
+              {/* confetti burst (victory only) */}
+              {win && [...Array(40)].map((_, i) => {
+                const colors = ["#34d399", "#fbbf24", "#22d3ee", "#d633ff", "#f7c948"];
+                const c = colors[i % colors.length];
+                const left = (i * 37) % 100;
+                const delay = (i % 10) * 0.05;
+                const drift = ((i % 7) - 3) * 24;
+                return (
+                  <motion.div key={i} className="absolute top-[-5%]"
+                    style={{ left: `${left}%`, width: 7, height: 11, background: c, borderRadius: 1 }}
+                    initial={{ y: 0, opacity: 1, rotate: 0 }}
+                    animate={{ y: "110vh", x: drift, opacity: [1, 1, 0], rotate: 360 + i * 30 }}
+                    transition={{ duration: 1.8 + (i % 5) * 0.25, delay, ease: "easeIn" }} />
+                );
+              })}
               {/* sweep beam */}
               <motion.div className="absolute h-full w-1/3 -skew-x-12"
                 style={{ background: `linear-gradient(90deg, transparent, ${col}33, transparent)` }}

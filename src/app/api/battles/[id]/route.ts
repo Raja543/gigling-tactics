@@ -26,7 +26,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     return NextResponse.json({ success: true, battle });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[battles/[id]] GET failed:', error);
+    return NextResponse.json({ success: false, error: 'Failed to load battle.' }, { status: 500 });
   }
 }

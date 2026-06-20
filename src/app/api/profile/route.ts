@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { normalizeAddress } from "@/lib/utils";
 import { ACHIEVEMENTS } from "@/engine/achievements";
+
+const MAX_USERNAME_LEN = 24;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -62,27 +65,38 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error("[profile] GET failed:", error);
+    return NextResponse.json({ success: false, error: "Failed to load profile." }, { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { walletAddress: raw, username, favoriteGiglingId } = body;
-    if (!raw) return NextResponse.json({ success: false, error: "wallet required" }, { status: 400 });
+    if (typeof raw !== "string" || !raw.trim()) {
+      return NextResponse.json({ success: false, error: "wallet required" }, { status: 400 });
+    }
     const walletAddress = normalizeAddress(raw);
+
+    // Only the authenticated owner may edit their profile. The SIWE session
+    // cookie holds the verified address; it must match the target wallet.
+    const session = (await cookies()).get("siwe-session")?.value;
+    if (!session || normalizeAddress(session) !== walletAddress) {
+      return NextResponse.json({ success: false, error: "Not authorized to edit this profile." }, { status: 401 });
+    }
+
     const user = await db.user.update({
       where: { walletAddress },
       data: {
-        ...(username !== undefined && { username }),
+        // Cap username length; allow clearing with an empty string.
+        ...(username !== undefined && { username: String(username).slice(0, MAX_USERNAME_LEN).trim() || null }),
         ...(favoriteGiglingId !== undefined && { favoriteGiglingId }),
       },
     });
     return NextResponse.json({ success: true, user });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error("[profile] PUT failed:", error);
+    return NextResponse.json({ success: false, error: "Failed to update profile." }, { status: 500 });
   }
 }

@@ -34,20 +34,28 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json({ success: true, decks });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[decks] GET failed:', error);
+    return NextResponse.json({ success: false, error: 'Failed to load teams.' }, { status: 500 });
   }
 }
 
+const MAX_NAME_LEN = 24;
+
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const { walletAddress: rawWallet, name, cardIds } = body;
 
-    if (!rawWallet || !cardIds || !Array.isArray(cardIds) || cardIds.length !== 3) {
-      return NextResponse.json({ success: false, error: 'Invalid payload. Must provide 3 cardIds.' }, { status: 400 });
+    if (typeof rawWallet !== 'string' || !rawWallet.trim() || !Array.isArray(cardIds) || cardIds.length !== 3) {
+      return NextResponse.json({ success: false, error: 'Invalid payload. Must provide a wallet and 3 cardIds.' }, { status: 400 });
+    }
+    // Reject duplicate cards in a team up front.
+    if (new Set(cardIds).size !== 3) {
+      return NextResponse.json({ success: false, error: 'A team must have 3 distinct cards.' }, { status: 400 });
     }
     const walletAddress = normalizeAddress(rawWallet);
+    const deckName = (typeof name === 'string' && name.trim() ? name.trim() : 'My Team').slice(0, MAX_NAME_LEN);
 
     // 1. Get or create user
     const user = await db.user.upsert({
@@ -86,7 +94,7 @@ export async function POST(request: Request) {
       const newDeck = await prisma.deck.create({
         data: {
           userId: user.id,
-          name: name || 'My Team',
+          name: deckName,
           teamPower,
           synergyType: prediction.synergyNames.join(', ') || null,
           predictedWinRate: prediction.winRate,
@@ -111,7 +119,8 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, deck });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[decks] POST failed:', error);
+    return NextResponse.json({ success: false, error: 'Failed to save team.' }, { status: 500 });
   }
 }

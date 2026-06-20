@@ -4,14 +4,22 @@ import { generateAITeam } from '@/engine/ai-team-generator';
 import { BattleEngine } from '@/engine/battle-engine';
 import { unlockAchievements } from '@/engine/achievements';
 import { ArenaTier } from '@prisma/client';
+import { normalizeAddress } from '@/lib/utils';
+
+const VALID_ARENA_TIERS = new Set<string>(Object.values(ArenaTier));
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { deckId, arenaTier = 'BRONZE' } = body;
+    const body = await request.json().catch(() => ({}));
+    const { deckId, walletAddress } = body;
+    // Validate the arena tier against the enum (bad value -> 400, not a leak).
+    const arenaTier: ArenaTier = VALID_ARENA_TIERS.has(body?.arenaTier) ? body.arenaTier : 'BRONZE';
 
-    if (!deckId) {
+    if (!deckId || typeof deckId !== 'string') {
       return NextResponse.json({ success: false, error: 'deckId is required' }, { status: 400 });
+    }
+    if (typeof walletAddress !== 'string' || !walletAddress.trim()) {
+      return NextResponse.json({ success: false, error: 'walletAddress is required' }, { status: 400 });
     }
 
     // 1. Fetch player deck
@@ -26,7 +34,10 @@ export async function POST(request: Request) {
       }
     });
 
-    if (!deck) {
+    // Verify the caller owns the deck — prevents running battles (and mutating
+    // ELO / W-L / battle counts) on someone else's account. Same response for
+    // missing vs not-owned so deck ids aren't enumerable.
+    if (!deck || deck.user.walletAddress !== normalizeAddress(walletAddress)) {
       return NextResponse.json({ success: false, error: 'Deck not found' }, { status: 404 });
     }
 
@@ -159,8 +170,9 @@ export async function POST(request: Request) {
       eloRating: deck.user.eloRating + eloChange,
       totalBattles: deck.user.totalBattles + 1
     });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[battles] POST failed:', error);
+    return NextResponse.json({ success: false, error: 'Failed to start battle.' }, { status: 500 });
   }
 }
 
@@ -181,7 +193,8 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json({ success: true, battles });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[battles] GET failed:', error);
+    return NextResponse.json({ success: false, error: 'Failed to load battles.' }, { status: 500 });
   }
 }

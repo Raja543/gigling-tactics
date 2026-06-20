@@ -42,7 +42,7 @@ export function useDecks(walletAddress: string | null) {
       const res = await fetch(`/api/decks/${deckId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, walletAddress }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to rename team");
@@ -55,9 +55,14 @@ export function useDecks(walletAddress: string | null) {
 
   const deleteDeckMutation = useMutation({
     mutationFn: async (deckId: string) => {
-      const res = await fetch(`/api/decks/${deckId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete team");
-      return res.json();
+      const res = await fetch(`/api/decks/${deckId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to delete team");
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["decks", walletAddress] });

@@ -9,7 +9,7 @@ export async function GET() {
     const regen = await regenerateStaleCards();
     return NextResponse.json({ success: true, ...regen });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error("[cards/regen] regen failed:", error);
+    return NextResponse.json({ success: false, error: "Regeneration failed." }, { status: 500 });
   }
 }

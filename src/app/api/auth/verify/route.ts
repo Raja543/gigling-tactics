@@ -15,7 +15,8 @@ const client = createPublicClient({
 // the on-chain public client.
 export async function POST(request: Request) {
   try {
-    const { message, signature } = await request.json();
+    const body = await request.json().catch(() => null);
+    const { message, signature } = body ?? {};
     if (!message || !signature) {
       return NextResponse.json(
         { success: false, error: "message and signature are required" },
@@ -62,9 +63,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, address: address.toLowerCase() });
   } catch (error) {
-    const errMessage = error instanceof Error ? error.message : String(error);
+    console.error("[auth/verify] verification failed:", error);
     return NextResponse.json(
-      { success: false, error: errMessage },
+      { success: false, error: "Verification failed." },
       { status: 500 },
     );
   }

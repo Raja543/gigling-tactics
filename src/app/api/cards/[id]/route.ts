@@ -27,7 +27,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     };
 
     return NextResponse.json({ success: true, card: mappedCard });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('[cards/[id]] GET failed:', error);
+    return NextResponse.json({ success: false, error: 'Failed to load card.' }, { status: 500 });
   }
 }

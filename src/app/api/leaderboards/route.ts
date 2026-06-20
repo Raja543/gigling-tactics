@@ -54,7 +54,7 @@ export async function GET() {
       arenaPlayers: arenaPlayers.map(mapPlayer),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error("[leaderboards] GET failed:", error);
+    return NextResponse.json({ success: false, error: "Failed to load leaderboards." }, { status: 500 });
   }
 }

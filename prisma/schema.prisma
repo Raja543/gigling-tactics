@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Rarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+  RELIC
+  GIGA
+}
+
+enum Faction {
+  NONE
+  CRUSADER
+  OVERSEER
+  ATHENA
+  ARCHON
+  FOXGLOVE
+  SUMMONER
+  CHOBO
+  GIGUS
+}
+
+enum ArenaTier {
+  UNRANKED
+  IRON
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+  ASCENDANT
+  IMMORTAL
+  RADIANT
+  LEGEND
+}
+
+enum BattleResult {
+  WIN
+  LOSS
+  DRAW
+}
+
+enum ActionType {
+  ATTACK
+  SPECIAL
+  PASSIVE
+  DEFEATED
+  HEAL
+  STATUS
+}
+
+enum CardRole {
+  FRONTLINE
+  DPS
+  SUPPORT
+}
+
+enum AchievementTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+}
+
+model User {
+  id                String        @id @default(uuid())
+  walletAddress     String        @unique @map("wallet_address")
+  username          String?
+  collectionScore   Int           @default(0) @map("collection_score")
+  battlesWon        Int           @default(0) @map("battles_won")
+  battlesLost       Int           @default(0) @map("battles_lost")
+  totalBattles      Int           @default(0) @map("total_battles")
+  eloRating         Int           @default(1000) @map("elo_rating")
+  favoriteGiglingId String?       @map("favorite_gigling_id")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  cards             Card[]
+  decks             Deck[]
+  battles           Battle[]
+  achievements      Achievement[]
+  syncLogs          CardSyncLog[]
+
+  @@map("users")
+}
+
+model Card {
+  id               String      @id @default(uuid())
+  userId           String      @map("user_id")
+  giglingId        String      @map("gigling_id")
+  name             String
+  imageUrl         String?     @map("image_url")
+  rarity           Rarity
+  ovr              Int
+  attack           Int
+  defense          Int
+  speed            Int
+  health           Int
+  luck             Int         @default(10)
+  faction          Faction
+  passiveAbility   String      @map("passive_ability")
+  specialAbility   String      @map("special_ability")
+  traitScore       Int         @map("trait_score")
+  performanceScore Int         @map("performance_score")
+  totalRaces       Int         @default(0) @map("total_races")
+  totalWins        Int         @default(0) @map("total_wins")
+  winRatePct       Int         @default(0) @map("win_rate_pct")
+  elo              Int         @default(1000)
+  rarityScore      Float       @map("rarity_score")
+  rawTraits        Json?       @map("raw_traits")
+  rawRaceData      Json?       @map("raw_race_data")
+  generatedAt      DateTime    @default(now()) @map("generated_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  traits           CardTrait[]
+  deckCards        DeckCard[]
+
+  @@unique([userId, giglingId])
+  @@index([rarity])
+  @@index([ovr])
+  @@index([faction])
+  @@map("cards")
+}
+
+model CardTrait {
+  id               String @id @default(uuid())
+  cardId           String @map("card_id")
+  traitType        String @map("trait_type")
+  traitValue       String @map("trait_value")
+  rarityPercentage Float  @map("rarity_percentage")
+  rarityTier       String @map("rarity_tier")
+  weight           Int
+  card             Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@map("card_traits")
+}
+
+model Deck {
+  id               String     @id @default(uuid())
+  userId           String     @map("user_id")
+  name             String     @default("My Team")
+  teamPower        Int        @default(0) @map("team_power")
+  synergyType      String?    @map("synergy_type")
+  predictedWinRate Float?     @map("predicted_win_rate")
+  isActive         Boolean    @default(false) @map("is_active")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deckCards        DeckCard[]
+  battles          Battle[]
+
+  @@map("decks")
+}
+
+model DeckCard {
+  id           String   @id @default(uuid())
+  deckId       String   @map("deck_id")
+  cardId       String   @map("card_id")
+  slotPosition Int      @map("slot_position")
+  role         CardRole @default(DPS)
+  deck         Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  card         Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([deckId, slotPosition])
+  @@unique([deckId, cardId])
+  @@map("deck_cards")
+}
+
+model Battle {
+  id                String       @id @default(uuid())
+  userId            String       @map("user_id")
+  deckId            String       @map("deck_id")
+  arenaTier         ArenaTier    @map("arena_tier")
+  result            BattleResult
+  turns             Int
+  playerDamageDealt Int          @default(0) @map("player_damage_dealt")
+  playerDamageTaken Int          @default(0) @map("player_damage_taken")
+  eloChange         Int          @default(0) @map("elo_change")
+  mvpCardId         String?      @map("mvp_card_id")
+  aiTeam            Json         @map("ai_team")
+  battleSummary     Json?        @map("battle_summary")
+  startedAt         DateTime     @default(now()) @map("started_at")
+  endedAt           DateTime?    @map("ended_at")
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deck              Deck         @relation(fields: [deckId], references: [id])
+  logs              BattleLog[]
+
+  @@index([userId])
+  @@index([result])
+  @@map("battles")
+}
+
+model BattleLog {
+  id           String     @id @default(uuid())
+  battleId     String     @map("battle_id")
+  turnNumber   Int        @map("turn_number")
+  sequence     Int
+  actorName    String     @map("actor_name")
+  actionType   ActionType @map("action_type")
+  targetName   String?    @map("target_name")
+  damage       Int?
+  isCritical   Boolean    @default(false) @map("is_critical")
+  healing      Int?
+  statusEffect String?    @map("status_effect")
+  message      String
+  battle       Battle     @relation(fields: [battleId], references: [id], onDelete: Cascade)
+
+  @@index([battleId, turnNumber])
+  @@map("battle_logs")
+}
+
+model Achievement {
+  id             String          @id @default(uuid())
+  userId         String          @map("user_id")
+  achievementKey String          @map("achievement_key")
+  title          String
+  description    String
+  icon           String
+  tier           AchievementTier
+  unlockedAt     DateTime        @default(now()) @map("unlocked_at")
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementKey])
+  @@map("achievements")
+}
+
+model CardSyncLog {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  cardsUpdated Int      @default(0) @map("cards_updated")
+  cardsAdded   Int      @default(0) @map("cards_added")
+  status       String   @default("success")
+  errorMessage String?  @map("error_message")
+  syncedAt     DateTime @default(now()) @map("synced_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, syncedAt])
+  @@map("card_sync_logs")
+}

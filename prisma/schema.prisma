@@ -129,6 +129,13 @@ model Card {
   @@index([rarity])
   @@index([ovr])
   @@index([faction])
+  // Composite + stat indexes matching the explorer's filter+sort paths.
+  @@index([faction, ovr])
+  @@index([rarity, ovr])
+  @@index([attack])
+  @@index([defense])
+  @@index([speed])
+  @@index([health])
   @@map("cards")
 }
 

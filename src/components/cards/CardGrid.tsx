@@ -10,6 +10,7 @@ interface CardGridProps {
   emptyMessage?: string;
   onCardClick?: (card: CardType) => void;
   selectedIds?: Set<string>;
+  skeletonCount?: number;
 }
 
 const container = {
@@ -17,21 +18,22 @@ const container = {
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.1
-    }
-  }
+      // Quick, capped stagger so a full page (48) finishes appearing in <0.5s.
+      staggerChildren: 0.025,
+    },
+  },
 };
 
 const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 }
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
 };
 
-export function CardGrid({ cards, isLoading, emptyMessage = "No cards found.", onCardClick, selectedIds }: CardGridProps) {
+export function CardGrid({ cards, isLoading, emptyMessage = "No cards found.", onCardClick, selectedIds, skeletonCount = 12 }: CardGridProps) {
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
-        {[...Array(8)].map((_, i) => (
+        {[...Array(skeletonCount)].map((_, i) => (
           <div key={i} className="rounded-xl bg-surface/50 border border-white/5 aspect-[3/4] animate-pulse flex items-center justify-center">
             <div className="w-12 h-12 rounded-full border-2 border-white/10 border-t-primary animate-spin" />
           </div>
@@ -59,7 +61,7 @@ export function CardGrid({ cards, isLoading, emptyMessage = "No cards found.", o
       className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6"
     >
       {cards.map((card) => (
-        <motion.div key={card.id || card.giglingId} variants={item} layout>
+        <motion.div key={card.id || card.giglingId} variants={item}>
           <CardDisplay
             card={card}
             onClick={onCardClick ? () => onCardClick(card) : undefined}

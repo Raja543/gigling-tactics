@@ -11,7 +11,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "prisma:generate": "dotenv -e .env.local -- prisma generate",
-    "prisma:validate": "dotenv -e .env.local -- prisma validate"
+    "prisma:validate": "dotenv -e .env.local -- prisma validate",
+    "prisma:migrate": "dotenv -e .env.local -- prisma migrate dev",
+    "prisma:deploy": "dotenv -e .env.local -- prisma migrate deploy",
+    "prisma:studio": "dotenv -e .env.local -- prisma studio"
   },
   "dependencies": {
     "@abstract-foundation/agw-react": "^1.13.0",

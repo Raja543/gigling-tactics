@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { factionStyle } from "@/lib/cosmetics";
@@ -26,14 +26,25 @@ export function CardFilters({ onFilterChange, factions, rarities }: CardFiltersP
     sort: "ovr_desc",
   });
   const [isOpen, setIsOpen] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current); }, []);
+
+  // Non-search filters apply immediately; search is debounced (~300ms) so typing
+  // doesn't fire a request per keystroke.
   const updateFilter = (key: keyof FilterState, value: string | null) => {
     const newFilters = { ...filters, [key]: value };
     setFilters(newFilters);
-    onFilterChange(newFilters);
+    if (key === "search") {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+      searchTimer.current = setTimeout(() => onFilterChange(newFilters), 300);
+    } else {
+      onFilterChange(newFilters);
+    }
   };
 
   const clearFilters = () => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
     const defaultFilters: FilterState = { search: "", faction: null, rarity: null, sort: "ovr_desc" };
     setFilters(defaultFilters);
     onFilterChange(defaultFilters);

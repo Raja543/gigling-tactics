@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
+import { AnimatePresence, motion } from "framer-motion";
 import type { FilterState } from "@/components/cards/CardFilters";
 
 // Lazy load the filters
@@ -10,10 +11,16 @@ const CardFilters = dynamic(() => import("@/components/cards/CardFilters").then(
 });
 import { CardGrid } from "@/components/cards/CardGrid";
 import { Button } from "@/components/ui/Button";
-import { RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { RefreshCw, ChevronLeft, ChevronRight, CheckCircle2, AlertCircle } from "lucide-react";
 import type { CardDisplay } from "@/types/card";
 
 const PAGE_SIZE = 48;
+
+// Serialize only the filter fields (sort/search/faction/rarity) so we can tell
+// a filter change (reset total) apart from a page change (reuse total).
+function filterKey(f: FilterState | undefined) {
+  return `${f?.faction ?? ""}|${f?.rarity ?? ""}|${f?.search ?? ""}|${f?.sort ?? ""}`;
+}
 
 export default function ExplorerPage() {
   const [cards, setCards] = useState<CardDisplay[]>([]);
@@ -23,9 +30,23 @@ export default function ExplorerPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+
+  // Cached total per filter set, so paging doesn't re-run COUNT(*).
+  const totalByFilter = useRef<Map<string, number>>(new Map());
+  // Abort in-flight requests when a newer one supersedes them.
+  const abortRef = useRef<AbortController | null>(null);
+
+  const showToast = (kind: "ok" | "err", msg: string) => {
+    setToast({ kind, msg });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const fetchCards = useCallback(
     async (f: FilterState | undefined, p: number) => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
       setIsLoading(true);
       try {
         const params = new URLSearchParams();
@@ -35,18 +56,26 @@ export default function ExplorerPage() {
         if (f?.sort) params.append("sort", f.sort);
         params.append("page", String(p));
         params.append("limit", String(PAGE_SIZE));
+        // Reuse a known total for this filter set to skip the COUNT(*).
+        const known = totalByFilter.current.get(filterKey(f));
+        if (known !== undefined) params.append("count", String(known));
 
-        const res = await fetch(`/api/cards/explore?${params.toString()}`);
+        const res = await fetch(`/api/cards/explore?${params.toString()}`, { signal: controller.signal });
         const data = await res.json();
         if (data.success) {
           setCards(data.cards);
           setTotal(data.total ?? data.cards.length);
           setTotalPages(data.totalPages ?? 1);
+          totalByFilter.current.set(filterKey(f), data.total ?? data.cards.length);
         }
       } catch (err) {
-        console.error("Failed to fetch cards", err);
+        if ((err as Error).name !== "AbortError") {
+          console.error("Failed to fetch cards", err);
+          showToast("err", "Failed to load cards");
+        }
+        return;
       } finally {
-        setIsLoading(false);
+        if (abortRef.current === controller) setIsLoading(false);
       }
     },
     [],
@@ -56,24 +85,47 @@ export default function ExplorerPage() {
     fetchCards(filters, page);
   }, [filters, page, fetchCards]);
 
+  // Scroll back to the top of the grid when the page changes.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [page]);
+
   const handleFilterChange = (f: FilterState) => {
     setPage(1);
     setFilters(f);
   };
 
   const handleSync = async () => {
+    // The sync endpoint is admin-gated. The token is never in the bundle: the
+    // operator pastes it once and we keep it in sessionStorage for the session.
+    let token = sessionStorage.getItem("adminSyncToken");
+    if (!token) {
+      token = window.prompt("Enter admin sync token") ?? "";
+      if (!token) return;
+      sessionStorage.setItem("adminSyncToken", token);
+    }
+
     setIsSyncing(true);
     try {
-      const res = await fetch("/api/cards/sync");
+      const res = await fetch("/api/cards/sync", {
+        method: "POST",
+        headers: { "x-admin-token": token },
+      });
+      if (res.status === 401) {
+        sessionStorage.removeItem("adminSyncToken"); // bad/expired token
+        showToast("err", "Unauthorized — invalid admin token.");
+        return;
+      }
       const data = await res.json();
       if (data.success) {
-        alert(`Synced! Added: ${data.cardsAdded}, Updated: ${data.cardsUpdated}`);
+        totalByFilter.current.clear(); // population changed
+        showToast("ok", `Synced! Added ${data.cardsAdded}, updated ${data.cardsUpdated}.`);
         fetchCards(filters, page);
       } else {
-        alert("Failed to sync: " + (data.error || "Unknown error"));
+        showToast("err", "Failed to sync: " + (data.error || "Unknown error"));
       }
     } catch {
-      alert("Failed to sync");
+      showToast("err", "Failed to sync");
     } finally {
       setIsSyncing(false);
     }
@@ -84,6 +136,25 @@ export default function ExplorerPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium shadow-2xl"
+            style={{
+              background: toast.kind === "ok" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
+              border: `1px solid ${toast.kind === "ok" ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)"}`,
+              backdropFilter: "blur(8px)",
+              color: toast.kind === "ok" ? "#6ee7b7" : "#fca5a5",
+            }}
+          >
+            {toast.kind === "ok" ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            {toast.msg}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-heading font-bold mb-2">Card Explorer</h1>
@@ -102,6 +173,7 @@ export default function ExplorerPage() {
       <CardGrid
         cards={cards}
         isLoading={isLoading}
+        skeletonCount={cards.length || PAGE_SIZE}
         emptyMessage="No cards found. Try adjusting your filters or syncing the leaderboard."
       />
 

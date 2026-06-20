@@ -2,16 +2,32 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { Faction, Prisma, Rarity } from '@prisma/client';
 
+const VALID_FACTIONS = new Set<string>(Object.values(Faction));
+const VALID_RARITIES = new Set<string>(Object.values(Rarity));
+const MAX_SEARCH_LEN = 64;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const faction = searchParams.get('faction');
-  const rarity = searchParams.get('rarity');
-  const search = searchParams.get('search');
+  // Validate enum inputs against an allowlist; ignore anything unrecognised so a
+  // bad value can't trip a Prisma validation error (and leak internals).
+  const factionParam = searchParams.get('faction');
+  const faction = factionParam && VALID_FACTIONS.has(factionParam) ? factionParam : null;
+  const rarityParam = searchParams.get('rarity');
+  const rarity = rarityParam && VALID_RARITIES.has(rarityParam) ? rarityParam : null;
+  // Cap the search string to keep ILIKE scans bounded.
+  const search = (searchParams.get('search') || '').slice(0, MAX_SEARCH_LEN).trim() || null;
   const owner = searchParams.get('owner');
   const sort = searchParams.get('sort') || 'ovr_desc';
-  const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+  // Hard page ceiling bounds the OFFSET so an out-of-range page can't force an
+  // expensive deep scan (population is < ~5k cards, i.e. ~100 pages at 48/page).
+  const page = Math.min(2000, Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '48', 10) || 48));
   const wantStats = searchParams.get('stats') === '1';
+  // The total only changes on sync, so the client fetches it once (page 1 /
+  // filter change) and passes it back via &count=N to skip the COUNT(*) on
+  // subsequent page navigations.
+  const knownTotal = parseInt(searchParams.get('count') || '', 10);
+  const hasKnownTotal = Number.isFinite(knownTotal) && knownTotal >= 0;
 
   try {
     const where: Prisma.CardWhereInput = {};
@@ -37,9 +53,10 @@ export async function GET(request: Request) {
     const orderBy = orderMap[sort] ?? { ovr: 'desc' };
 
     // Note: no `traits` include - grid cards don't render traits, so we skip
-    // the join for much faster, lighter responses.
+    // the join for much faster, lighter responses. Count + page run in parallel;
+    // the COUNT(*) is skipped when the client already knows the total.
     const [total, cards] = await Promise.all([
-      db.card.count({ where }),
+      hasKnownTotal && !wantStats ? Promise.resolve(knownTotal) : db.card.count({ where }),
       db.card.findMany({
         where,
         take: limit,
@@ -68,17 +85,25 @@ export async function GET(request: Request) {
       };
     }
 
-    return NextResponse.json({
-      success: true,
-      cards: mappedCards,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-      stats,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        cards: mappedCards,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        stats,
+      },
+      {
+        // The card population is near-static between syncs, so let the CDN serve
+        // repeat/paginated views instantly and revalidate in the background.
+        headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=300' },
+      },
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    // Log full detail server-side; return a generic message to the client.
+    console.error('[cards/explore] query failed:', error);
+    return NextResponse.json({ success: false, error: 'Failed to load cards.' }, { status: 500 });
   }
 }

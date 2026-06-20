@@ -70,6 +70,10 @@ function CardDisplayBase({ card, className, onClick, interactive = true, selecte
               if (cidPath && !img.dataset.fallback) {
                 img.dataset.fallback = "1";
                 img.src = `https://ipfs.io/ipfs/${cidPath}`;
+              } else if (!img.dataset.fallback2) {
+                // Final guard: stop retrying broken CIDs after one IPFS attempt.
+                img.dataset.fallback2 = "1";
+                img.src = `https://api.dicebear.com/7.x/bottts/svg?seed=${card.giglingId}`;
               }
             }}
           />

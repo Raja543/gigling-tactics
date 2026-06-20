@@ -96,9 +96,15 @@ export async function GET(request: Request) {
         stats,
       },
       {
-        // The card population is near-static between syncs, so let the CDN serve
-        // repeat/paginated views instantly and revalidate in the background.
-        headers: { 'Cache-Control': 's-maxage=60, stale-while-revalidate=300' },
+        // Public catalog is near-static between syncs, so let the CDN serve
+        // repeat/paginated views instantly. Owner-scoped (personalized) queries
+        // must stay fresh + private — caching them would show stale collections
+        // right after an import.
+        headers: {
+          'Cache-Control': owner
+            ? 'private, no-store'
+            : 's-maxage=60, stale-while-revalidate=300',
+        },
       },
     );
   } catch (error) {

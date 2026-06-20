@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
-import { AnimatePresence, motion } from "framer-motion";
 import type { FilterState } from "@/components/cards/CardFilters";
 
 // Lazy load the filters
@@ -11,7 +10,8 @@ const CardFilters = dynamic(() => import("@/components/cards/CardFilters").then(
 });
 import { CardGrid } from "@/components/cards/CardGrid";
 import { Button } from "@/components/ui/Button";
-import { RefreshCw, ChevronLeft, ChevronRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
+import { RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import type { CardDisplay } from "@/types/card";
 
 const PAGE_SIZE = 48;
@@ -23,31 +23,29 @@ function filterKey(f: FilterState | undefined) {
 }
 
 export default function ExplorerPage() {
+  const toast = useToast();
   const [cards, setCards] = useState<CardDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefetching, setIsRefetching] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [filters, setFilters] = useState<FilterState | undefined>(undefined);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
 
   // Cached total per filter set, so paging doesn't re-run COUNT(*).
   const totalByFilter = useRef<Map<string, number>>(new Map());
   // Abort in-flight requests when a newer one supersedes them.
   const abortRef = useRef<AbortController | null>(null);
 
-  const showToast = (kind: "ok" | "err", msg: string) => {
-    setToast({ kind, msg });
-    setTimeout(() => setToast(null), 4000);
-  };
-
   const fetchCards = useCallback(
-    async (f: FilterState | undefined, p: number) => {
+    async (f: FilterState | undefined, p: number, hasExisting: boolean) => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
-      setIsLoading(true);
+      // First load shows skeletons; later loads dim the existing grid instead.
+      if (hasExisting) setIsRefetching(true);
+      else setIsLoading(true);
       try {
         const params = new URLSearchParams();
         if (f?.faction) params.append("faction", f.faction);
@@ -71,18 +69,22 @@ export default function ExplorerPage() {
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           console.error("Failed to fetch cards", err);
-          showToast("err", "Failed to load cards");
+          toast.error("Failed to load cards.");
         }
         return;
       } finally {
-        if (abortRef.current === controller) setIsLoading(false);
+        if (abortRef.current === controller) {
+          setIsLoading(false);
+          setIsRefetching(false);
+        }
       }
     },
-    [],
+    [toast],
   );
 
   useEffect(() => {
-    fetchCards(filters, page);
+    fetchCards(filters, page, cards.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, page, fetchCards]);
 
   // Scroll back to the top of the grid when the page changes.
@@ -106,6 +108,7 @@ export default function ExplorerPage() {
     }
 
     setIsSyncing(true);
+    const tid = toast.loading("Syncing leaderboard… this can take a minute.");
     try {
       const res = await fetch("/api/cards/sync", {
         method: "POST",
@@ -113,19 +116,19 @@ export default function ExplorerPage() {
       });
       if (res.status === 401) {
         sessionStorage.removeItem("adminSyncToken"); // bad/expired token
-        showToast("err", "Unauthorized — invalid admin token.");
+        toast.show("error", "Unauthorized — invalid admin token.", { id: tid });
         return;
       }
       const data = await res.json();
       if (data.success) {
         totalByFilter.current.clear(); // population changed
-        showToast("ok", `Synced! Added ${data.cardsAdded}, updated ${data.cardsUpdated}.`);
-        fetchCards(filters, page);
+        toast.show("success", `Synced! Added ${data.cardsAdded}, updated ${data.cardsUpdated}.`, { id: tid });
+        fetchCards(filters, page, cards.length > 0);
       } else {
-        showToast("err", "Failed to sync: " + (data.error || "Unknown error"));
+        toast.show("error", "Failed to sync: " + (data.error || "Unknown error"), { id: tid });
       }
     } catch {
-      showToast("err", "Failed to sync");
+      toast.show("error", "Failed to sync.", { id: tid });
     } finally {
       setIsSyncing(false);
     }
@@ -136,25 +139,6 @@ export default function ExplorerPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* Toast */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium shadow-2xl"
-            style={{
-              background: toast.kind === "ok" ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)",
-              border: `1px solid ${toast.kind === "ok" ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)"}`,
-              backdropFilter: "blur(8px)",
-              color: toast.kind === "ok" ? "#6ee7b7" : "#fca5a5",
-            }}
-          >
-            {toast.kind === "ok" ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-            {toast.msg}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-heading font-bold mb-2">Card Explorer</h1>
@@ -170,19 +154,21 @@ export default function ExplorerPage() {
 
       <CardFilters factions={FACTIONS} rarities={RARITIES} onFilterChange={handleFilterChange} />
 
-      <CardGrid
-        cards={cards}
-        isLoading={isLoading}
-        skeletonCount={cards.length || PAGE_SIZE}
-        emptyMessage="No cards found. Try adjusting your filters or syncing the leaderboard."
-      />
+      <div className={`transition-opacity duration-200 ${isRefetching ? "opacity-40 pointer-events-none" : "opacity-100"}`}>
+        <CardGrid
+          cards={cards}
+          isLoading={isLoading}
+          skeletonCount={cards.length || PAGE_SIZE}
+          emptyMessage="No cards found. Try adjusting your filters or syncing the leaderboard."
+        />
+      </div>
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-4 mt-10">
           <Button
             variant="secondary"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1 || isLoading}
+            disabled={page <= 1 || isLoading || isRefetching}
           >
             <ChevronLeft size={16} className="mr-1" /> Prev
           </Button>
@@ -192,7 +178,7 @@ export default function ExplorerPage() {
           <Button
             variant="secondary"
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages || isLoading}
+            disabled={page >= totalPages || isLoading || isRefetching}
           >
             Next <ChevronRight size={16} className="ml-1" />
           </Button>

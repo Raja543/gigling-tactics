@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { CardDisplay } from "./CardDisplay";
+import { CardSkeleton } from "@/components/ui/Skeleton";
 import type { CardDisplay as CardType } from "@/types/card";
 
 interface CardGridProps {
@@ -34,9 +35,7 @@ export function CardGrid({ cards, isLoading, emptyMessage = "No cards found.", o
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
         {[...Array(skeletonCount)].map((_, i) => (
-          <div key={i} className="rounded-xl bg-surface/50 border border-white/5 aspect-[3/4] animate-pulse flex items-center justify-center">
-            <div className="w-12 h-12 rounded-full border-2 border-white/10 border-t-primary animate-spin" />
-          </div>
+          <CardSkeleton key={i} />
         ))}
       </div>
     );

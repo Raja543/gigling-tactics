@@ -12,6 +12,9 @@ const CardFilters = dynamic(() => import("@/components/cards/CardFilters").then(
 });
 import { Download, Wallet } from "lucide-react";
 import { useWallet } from "@/components/wallet/WalletProvider";
+import { useToast } from "@/components/ui/Toast";
+import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
+import { useDecks } from "@/hooks/useDecks";
 import type { CardDisplay } from "@/types/card";
 
 const FACTIONS = ["CRUSADER", "OVERSEER", "ATHENA", "ARCHON", "FOXGLOVE", "SUMMONER", "CHOBO", "GIGUS"];
@@ -27,22 +30,31 @@ interface Stats {
 
 export default function CollectionPage() {
   const { address, isConnected, isConnecting, connect } = useWallet();
+  const { decks = [] } = useDecks(address);
+  const toast = useToast();
   const [cards, setCards] = useState<CardDisplay[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [filters, setFilters] = useState<FilterState | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isRefetching, setIsRefetching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importMsg, setImportMsg] = useState<string | null>(null);
-  
+
   const observerTarget = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const fetchPage = useCallback(
-    async (f: FilterState | null, p: number, append: boolean) => {
+    async (f: FilterState | null, p: number, append: boolean, hasExisting = false) => {
       if (!address) return;
-      append ? setLoadingMore(true) : setLoading(true);
+      // Append loads run alongside; non-append loads supersede prior requests.
+      if (!append) abortRef.current?.abort();
+      const controller = new AbortController();
+      if (!append) abortRef.current = controller;
+      if (append) setLoadingMore(true);
+      else if (hasExisting) setIsRefetching(true);
+      else setLoading(true);
       try {
         const params = new URLSearchParams({ owner: address, page: String(p), limit: String(PAGE_SIZE) });
         if (f?.faction) params.set("faction", f.faction);
@@ -50,7 +62,7 @@ export default function CollectionPage() {
         if (f?.search) params.set("search", f.search);
         if (f?.sort) params.set("sort", f.sort);
         if (p === 1) params.set("stats", "1"); // aggregate only on first page
-        const res = await fetch(`/api/cards/explore?${params.toString()}`);
+        const res = await fetch(`/api/cards/explore?${params.toString()}`, { signal: controller.signal });
         const data = await res.json();
         if (data.success) {
           setCards((prev) => (append ? [...prev, ...data.cards] : data.cards));
@@ -58,15 +70,22 @@ export default function CollectionPage() {
           setPage(p);
           if (p === 1 && data.stats) setStats(data.stats);
         }
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          console.error("Failed to load collection", err);
+          toast.error("Failed to load your collection.");
+        }
       } finally {
-        append ? setLoadingMore(false) : setLoading(false);
+        if (append) setLoadingMore(false);
+        else { setLoading(false); setIsRefetching(false); }
       }
     },
-    [address],
+    [address, toast],
   );
 
   useEffect(() => {
-    if (address) fetchPage(filters, 1, false);
+    if (address) fetchPage(filters, 1, false, cards.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, filters, fetchPage]);
 
   // Infinite Scroll Observer
@@ -90,7 +109,7 @@ export default function CollectionPage() {
   const importGiglings = async () => {
     if (!address) return;
     setImporting(true);
-    setImportMsg(null);
+    const tid = toast.loading("Reading your Giglings from the chain…");
     try {
       const res = await fetch("/api/giglings/import", {
         method: "POST",
@@ -100,17 +119,17 @@ export default function CollectionPage() {
       const data = await res.json();
       if (data.success) {
         const total = data.cardsAdded + data.cardsUpdated;
-        setImportMsg(
-          data.petIds.length === 0
-            ? "No Gigling NFTs found on-chain for this wallet."
-            : `Imported ${total} Gigling${total === 1 ? "" : "s"} (${data.cardsAdded} new).`,
-        );
-        fetchPage(filters, 1, false);
+        if (data.petIds.length === 0) {
+          toast.show("info", "No Gigling NFTs found on-chain for this wallet.", { id: tid });
+        } else {
+          toast.show("success", `Imported ${total} Gigling${total === 1 ? "" : "s"} (${data.cardsAdded} new).`, { id: tid });
+        }
+        fetchPage(filters, 1, false, cards.length > 0);
       } else {
-        setImportMsg(`Import failed: ${data.error}`);
+        toast.show("error", `Import failed: ${data.error || "Unknown error"}`, { id: tid });
       }
     } catch {
-      setImportMsg("Network error during import.");
+      toast.show("error", "Network error during import.", { id: tid });
     } finally {
       setImporting(false);
     }
@@ -145,7 +164,6 @@ export default function CollectionPage() {
             <Download size={16} className="mr-2" />
             Import Giglings from chain
           </Button>
-          {importMsg && <p className="text-sm text-white/60">{importMsg}</p>}
         </div>
       </div>
 
@@ -166,13 +184,25 @@ export default function CollectionPage() {
         />
       </div>
 
+      {!loading && cards.length === 0 && (
+        <OnboardingChecklist
+          connected={!!address}
+          hasCards={cards.length > 0}
+          hasTeam={decks.length > 0}
+          className="mb-8 max-w-xl"
+        />
+      )}
+
       <CardFilters factions={FACTIONS} rarities={RARITIES} onFilterChange={setFilters} />
 
-      <CardGrid
-        cards={cards}
-        isLoading={loading}
-        emptyMessage="No cards yet. Click 'Import Giglings from chain' to pull your NFTs."
-      />
+      <div className={`transition-opacity duration-200 ${isRefetching ? "opacity-40 pointer-events-none" : "opacity-100"}`}>
+        <CardGrid
+          cards={cards}
+          isLoading={loading}
+          skeletonCount={PAGE_SIZE}
+          emptyMessage="No cards yet. Click 'Import Giglings from chain' to pull your NFTs."
+        />
+      </div>
 
       {page < totalPages && (
         <div ref={observerTarget} className="flex justify-center mt-8 py-4">

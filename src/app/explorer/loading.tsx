@@ -1,0 +1,33 @@
+import { Skeleton, CardSkeleton } from "@/components/ui/Skeleton";
+
+// Shown instantly by Next.js while the explorer route loads.
+export default function ExplorerLoading() {
+  return (
+    <div className="container mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+        <Skeleton className="h-10 w-44 rounded-lg" />
+      </div>
+
+      {/* Filter bar */}
+      <div className="bg-surface/50 border border-white/10 rounded-xl p-4 mb-8">
+        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+          <Skeleton className="h-9 w-full md:w-96 rounded-lg" />
+          <Skeleton className="h-9 w-40 rounded-lg" />
+        </div>
+        <div className="mt-4 pt-4 border-t border-white/10 flex flex-wrap gap-2">
+          {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-7 w-20 rounded-full" />)}
+        </div>
+      </div>
+
+      {/* Card grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 sm:gap-6">
+        {[...Array(18)].map((_, i) => <CardSkeleton key={i} />)}
+      </div>
+    </div>
+  );
+}

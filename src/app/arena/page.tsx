@@ -50,7 +50,7 @@ export default function ArenaPage() {
 
   if (!address) {
     return (
-      <div className="container mx-auto px-4 py-12 text-center">
+      <div className="container mx-auto px-6 sm:px-8 py-12 text-center">
         <h1 className="text-3xl font-heading font-bold mb-4">Connect Wallet</h1>
         <p className="text-white/60 mb-6">You need to connect your wallet to enter the arena.</p>
       </div>
@@ -89,7 +89,7 @@ export default function ArenaPage() {
 
   if (activeBattle) {
     return (
-      <div className="container mx-auto px-4 py-8 h-[calc(100vh-80px)]">
+      <div className="container mx-auto px-6 sm:px-8 py-8 h-[calc(100vh-80px)]">
         <ClashArena
           battleData={activeBattle}
           onExit={() => {
@@ -104,7 +104,7 @@ export default function ArenaPage() {
   const rank = rankInfo ? calculateRank(rankInfo.elo, rankInfo.total) : null;
 
   return (
-    <div className="container mx-auto px-4 py-12">
+    <div className="container mx-auto px-6 sm:px-8 py-12">
       <RankingSystemModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
       
       {/* ─── Title Section ─── */}

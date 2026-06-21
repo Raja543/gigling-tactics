@@ -3,7 +3,7 @@ import { Skeleton, CardSkeleton } from "@/components/ui/Skeleton";
 // Shown instantly by Next.js while the collection route loads.
 export default function CollectionLoading() {
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-6 sm:px-8 py-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div className="space-y-2">

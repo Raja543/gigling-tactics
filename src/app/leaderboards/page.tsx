@@ -28,7 +28,7 @@ export default function LeaderboardsPage() {
   }, []);
 
   return (
-    <div className="container mx-auto px-4 py-10">
+    <div className="container mx-auto px-6 sm:px-8 py-10">
       <div className="text-center mb-10">
         <Trophy className="mx-auto text-accent mb-4" size={48} />
         <h1 className="text-4xl md:text-5xl font-heading font-black uppercase tracking-widest mb-3">Leaderboards</h1>

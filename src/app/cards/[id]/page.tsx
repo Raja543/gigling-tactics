@@ -52,7 +52,7 @@ function renderCardDetail(card: any) {
   const ownerShort = owner ? `${owner.slice(0, 6)}…${owner.slice(-4)}` : "Unknown";
 
   return (
-    <div className="container mx-auto px-4 py-12">
+    <div className="container mx-auto px-6 sm:px-8 py-12">
       <Link href="/explorer" className="inline-flex items-center text-white/60 hover:text-white mb-8 transition-colors">
         <ArrowLeft size={16} className="mr-2" />
         Back to Explorer

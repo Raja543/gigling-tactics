@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function LeaderboardsLoading() {
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-6 sm:px-8 py-8">
       <div className="space-y-2 mb-8">
         <Skeleton className="h-8 w-56" />
         <Skeleton className="h-4 w-72" />

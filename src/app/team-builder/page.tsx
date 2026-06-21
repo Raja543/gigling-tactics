@@ -99,7 +99,7 @@ export default function TeamBuilderPage() {
 
   if (!address) {
     return (
-      <div className="container mx-auto px-4 py-24 text-center">
+      <div className="container mx-auto px-6 sm:px-8 py-24 text-center">
         <AlertCircle className="mx-auto text-white/40 mb-4" size={48} />
         <h1 className="text-3xl font-heading font-bold mb-4">Connect Wallet to Build Team</h1>
         <p className="text-white/60 max-w-md mx-auto">
@@ -110,7 +110,7 @@ export default function TeamBuilderPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-6 sm:px-8 py-8">
       {/* Toast */}
       <AnimatePresence>
         {toast && (

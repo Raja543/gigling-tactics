@@ -3,7 +3,7 @@ import { Skeleton, CardSkeleton } from "@/components/ui/Skeleton";
 // Shown instantly by Next.js while the explorer route loads.
 export default function ExplorerLoading() {
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-6 sm:px-8 py-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div className="space-y-2">

@@ -29,7 +29,7 @@ export default function ProfilePage() {
 
   if (!isConnected || !address) {
     return (
-      <div className="container mx-auto px-4 py-24 text-center">
+      <div className="container mx-auto px-6 sm:px-8 py-24 text-center">
         <AlertCircle className="mx-auto text-white/40 mb-4" size={48} />
         <h1 className="text-3xl font-heading font-bold mb-4">Your Dashboard</h1>
         <p className="text-white/60 max-w-md mx-auto mb-8">Connect your Abstract wallet to view your competitive stats, collection, and match history.</p>
@@ -40,7 +40,7 @@ export default function ProfilePage() {
 
   if (loading && !profile) {
     return (
-      <div className="container mx-auto px-4 py-32 flex flex-col items-center justify-center">
+      <div className="container mx-auto px-6 sm:px-8 py-32 flex flex-col items-center justify-center">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
         <div className="text-white/50 tracking-widest uppercase text-sm font-bold animate-pulse">Syncing Gigaverse Data...</div>
       </div>
@@ -58,7 +58,7 @@ export default function ProfilePage() {
   ];
 
   return (
-    <div className="container mx-auto px-4 py-10 max-w-6xl">
+    <div className="container mx-auto px-6 sm:px-8 py-10 max-w-6xl">
       
       {/* ─── Premium Player Banner ─── */}
       <motion.div 

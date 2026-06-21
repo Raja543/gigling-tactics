@@ -144,7 +144,7 @@ export default function DocsPage() {
   }, []);
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-7xl">
+    <div className="container mx-auto px-6 sm:px-8 py-12 max-w-7xl">
       <div className="mb-14">
         <h1 className="text-5xl md:text-6xl font-heading font-black mb-4 tracking-tight">
           <span className="bg-gradient-to-r from-primary via-fuchsia-400 to-accent bg-clip-text text-transparent">

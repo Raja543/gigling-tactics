@@ -137,7 +137,7 @@ export default function CollectionPage() {
 
   if (!isConnected || !address) {
     return (
-      <div className="container mx-auto px-4 py-24 text-center">
+      <div className="container mx-auto px-6 sm:px-8 py-24 text-center">
         <Wallet className="mx-auto text-white/40 mb-4" size={48} />
         <h1 className="text-3xl font-heading font-bold mb-4">My Collection</h1>
         <p className="text-white/60 max-w-md mx-auto mb-8">
@@ -151,7 +151,7 @@ export default function CollectionPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-6 sm:px-8 py-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-heading font-bold mb-1">My Collection</h1>

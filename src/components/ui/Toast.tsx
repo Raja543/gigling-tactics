@@ -27,7 +27,7 @@ const STYLES: Record<ToastKind, { color: string; bg: string; border: string; Ico
   success: { color: "#6ee7b7", bg: "rgba(16,185,129,0.14)", border: "rgba(16,185,129,0.4)", Icon: CheckCircle2 },
   error: { color: "#fca5a5", bg: "rgba(239,68,68,0.14)", border: "rgba(239,68,68,0.4)", Icon: AlertCircle },
   info: { color: "#93c5fd", bg: "rgba(59,130,246,0.14)", border: "rgba(59,130,246,0.4)", Icon: Info },
-  loading: { color: "#c4b5fd", bg: "rgba(139,92,246,0.14)", border: "rgba(139,92,246,0.4)", Icon: Loader2 },
+  loading: { color: "#f0a3ec", bg: "rgba(226,59,214,0.14)", border: "rgba(226,59,214,0.4)", Icon: Loader2 },
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {

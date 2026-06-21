@@ -28,9 +28,8 @@ export function Footer() {
         <div>
           <h3 className="font-semibold mb-4 text-white/90">Community</h3>
           <ul className="space-y-2 text-sm text-white/60">
-            <li><a href="#" className="hover:text-white transition-colors">Discord</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">Twitter</a></li>
-            <li><a href="#" className="hover:text-white transition-colors">Gigaverse</a></li>
+            <li><a href="https://gigaverse.io" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Gigaverse</a></li>
+            <li><a href="https://abs.xyz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Abstract Chain</a></li>
           </ul>
         </div>
       </div>

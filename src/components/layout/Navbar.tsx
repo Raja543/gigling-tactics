@@ -29,7 +29,7 @@ export function Navbar() {
         <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
           <span
             className="grid place-items-center w-9 h-9 rounded-xl text-white shadow-lg transition-transform group-hover:scale-105 group-hover:rotate-3"
-            style={{ background: "linear-gradient(135deg, var(--color-primary, #6C5CE7), var(--color-accent, #a855f7))", boxShadow: "0 0 18px rgba(108,92,231,0.45)" }}
+            style={{ background: "linear-gradient(135deg, #e23bd6, #2dd4bf)", boxShadow: "0 0 18px rgba(226,59,214,0.45)" }}
           >
             <Swords size={18} strokeWidth={2.5} />
           </span>
@@ -55,7 +55,7 @@ export function Navbar() {
                   <motion.span
                     layoutId="navbar-active"
                     className="absolute inset-0 rounded-full -z-10"
-                    style={{ background: "linear-gradient(135deg, rgba(108,92,231,0.35), rgba(168,85,247,0.25))", border: "1px solid rgba(168,85,247,0.4)" }}
+                    style={{ background: "linear-gradient(135deg, rgba(226,59,214,0.32), rgba(45,212,191,0.22))", border: "1px solid rgba(226,59,214,0.4)" }}
                     transition={{ type: "spring", stiffness: 400, damping: 32 }}
                   />
                 )}

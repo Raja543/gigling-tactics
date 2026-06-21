@@ -58,6 +58,10 @@ function CardDisplayBase({ card, className, onClick, interactive = true, selecte
           className="absolute inset-0"
           style={{ background: `radial-gradient(circle at 50% 30%, ${faction.color}33, var(--background) 70%)` }}
         />
+        {/* premium foil sheen on hover */}
+        {interactive && (
+          <div className="absolute inset-0 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none foil-sheen rounded-xl" />
+        )}
         {card.imageUrl ? (
           <img
             src={card.imageUrl}

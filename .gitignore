@@ -46,3 +46,7 @@ next-env.d.ts
 /test_db.ts
 /test_fetch.js
 /test_giga.ts
+
+# Large raw screen recordings (commit the compressed /public/arena-preview.mp4 instead)
+*.mov
+public/*.mov

@@ -128,6 +128,38 @@ See the in-app **Docs** page (`/docs`) for the full formulas, combat rules, rari
 
 ---
 
+## 🌐 Gigaverse API Integration
+
+All Gigaverse calls are centralized in **`src/services/gigaverse-api.ts`**, which wraps a single
+`gigaverseFetch()` helper around `GIGAVERSE_API_BASE` (default `https://gigaverse.io/api/racing`).
+Card stats are derived **only** from this live data plus on-chain ownership — there is no mock data.
+
+### Endpoints used
+
+| Endpoint | Wrapper fn | What it returns | Used by |
+|---|---|---|---|
+| `GET /leaderboard/elo?limit=&offset=` | `fetchEloLeaderboard` → `fetchAllLeaderboard` | The racing population, paginated (100/page) by ELO | Catalog **sync** |
+| `GET /pets?ids=a,b,c` | `fetchPets` → `fetchPetsChunked` | Per-pet racing data: rarity, faction, win/race counts, ELO, traits, stat ranges, `imgUrl` (real NFT art). Max 50 ids/request, so it's chunked | **Sync** + **import** |
+| `GET /pets/stats?ids=` · `GET /pets/{id}/stats` | `fetchPetStats` · `fetchSinglePetStats` | Extra per-pet stat detail | Stat backfill |
+| `GET /stats` | `fetchGlobalStats` | Global racing stats | Optional aggregates |
+| `GET /races/{wallet}` | `fetchWalletRaces` | A wallet's recent races | Optional |
+
+### Where it's consumed
+
+- **Catalog sync — `src/services/card-sync.ts`** (triggered by `POST /api/cards/sync`, the admin
+  "Sync Leaderboard" button): `fetchAllLeaderboard()` to enumerate every racing Gigling, then
+  `fetchPetsChunked()` to hydrate each pet, then `petToPetData()` / `leaderboardEntryToPetData()`
+  → `generateCard()` → bulk upsert into Postgres.
+- **Per-wallet import — `src/services/gigling-import.ts`** (triggered by `POST /api/giglings/import`,
+  the Collection page's "Import Giglings from chain"): reads owned token IDs **on-chain** via viem
+  (`src/services/contract-reader.ts`, `GigaPetNFT` contract), then `fetchPets()` for those IDs,
+  then `generateCard()` to persist the player's cards with their real NFT art.
+
+So the Gigaverse API supplies the **racing data and artwork**; the chain supplies **ownership**; and
+`engine/card-generator.ts` turns both into deterministic cards.
+
+---
+
 ## 🧪 Testing
 
 Vitest covers the deterministic engine and API security:

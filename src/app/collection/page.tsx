@@ -41,9 +41,12 @@ export default function CollectionPage() {
   const [isRefetching, setIsRefetching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [initialLoaded, setInitialLoaded] = useState(false);
 
   const observerTarget = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Wallets we've already auto-imported this session (prevents re-firing).
+  const autoImportedRef = useRef<Set<string>>(new Set());
 
   const fetchPage = useCallback(
     async (f: FilterState | null, p: number, append: boolean, hasExisting = false) => {
@@ -77,11 +80,14 @@ export default function CollectionPage() {
         }
       } finally {
         if (append) setLoadingMore(false);
-        else { setLoading(false); setIsRefetching(false); }
+        else { setLoading(false); setIsRefetching(false); setInitialLoaded(true); }
       }
     },
     [address, toast],
   );
+
+  // Reset per-wallet load state when the connected address changes.
+  useEffect(() => { setInitialLoaded(false); }, [address]);
 
   useEffect(() => {
     if (address) fetchPage(filters, 1, false, cards.length > 0);
@@ -106,10 +112,10 @@ export default function CollectionPage() {
     return () => observer.disconnect();
   }, [observerTarget, page, totalPages, loadingMore, loading, filters, fetchPage]);
 
-  const importGiglings = async () => {
+  const importGiglings = async (auto = false) => {
     if (!address) return;
     setImporting(true);
-    const tid = toast.loading("Reading your Giglings from the chain…");
+    const tid = toast.loading(auto ? "Importing your Giglings…" : "Reading your Giglings from the chain…");
     try {
       const res = await fetch("/api/giglings/import", {
         method: "POST",
@@ -134,6 +140,18 @@ export default function CollectionPage() {
       setImporting(false);
     }
   };
+
+  // ── Auto-import on first login ──
+  // Once the (unfiltered) collection has loaded and it's empty, pull the wallet's
+  // Giglings from chain automatically — one time per wallet, no extra click.
+  useEffect(() => {
+    if (!address || !initialLoaded || importing || filters) return;
+    if (cards.length > 0) return;
+    if (autoImportedRef.current.has(address)) return;
+    autoImportedRef.current.add(address);
+    importGiglings(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, initialLoaded, importing, cards.length, filters]);
 
   if (!isConnected || !address) {
     return (
@@ -160,9 +178,9 @@ export default function CollectionPage() {
           </p>
         </div>
         <div className="flex flex-col items-start md:items-end gap-1">
-          <Button variant="primary" onClick={importGiglings} isLoading={importing}>
+          <Button variant="primary" onClick={() => importGiglings(false)} isLoading={importing}>
             <Download size={16} className="mr-2" />
-            Import Giglings from chain
+            {cards.length > 0 ? "Re-sync from chain" : "Import Giglings"}
           </Button>
         </div>
       </div>
@@ -184,13 +202,30 @@ export default function CollectionPage() {
         />
       </div>
 
-      {!loading && cards.length === 0 && (
-        <OnboardingChecklist
-          connected={!!address}
-          hasCards={cards.length > 0}
-          hasTeam={decks.length > 0}
-          className="mb-8 max-w-xl"
-        />
+      {/* First-time auto-import in progress: prominent status panel */}
+      {importing && cards.length === 0 ? (
+        <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] p-12 text-center mb-8 relative overflow-hidden">
+          <div className="absolute -right-16 -top-16 w-56 h-56 rounded-full blur-[90px] pointer-events-none" style={{ background: "rgba(226,59,214,0.18)" }} />
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="w-14 h-14 rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center mb-5">
+              <Download size={26} className="text-primary animate-bounce" />
+            </div>
+            <h3 className="text-xl font-heading font-bold mb-2">Importing your Giglings…</h3>
+            <p className="text-white/50 max-w-sm mb-5">Reading your NFTs on-chain and generating their cards. This only takes a moment.</p>
+            <div className="w-48 h-1.5 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-primary to-accent animate-[shimmer_1.4s_linear_infinite]" style={{ backgroundSize: "200% 100%" }} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        !loading && cards.length === 0 && (
+          <OnboardingChecklist
+            connected={!!address}
+            hasCards={cards.length > 0}
+            hasTeam={decks.length > 0}
+            className="mb-8 max-w-xl"
+          />
+        )
       )}
 
       <CardFilters factions={FACTIONS} rarities={RARITIES} onFilterChange={setFilters} />

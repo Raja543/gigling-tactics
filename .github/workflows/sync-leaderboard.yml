@@ -1,0 +1,33 @@
+name: Sync Leaderboard
+
+# Keeps the card catalog fresh by calling the admin sync endpoint on a schedule.
+# Requires two repo secrets (Settings → Secrets and variables → Actions):
+#   APP_URL          e.g. https://gigling-tactics.vercel.app   (no trailing slash)
+#   ADMIN_SYNC_TOKEN the same value as the app's ADMIN_SYNC_TOKEN env var
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily at 06:00 UTC
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger leaderboard sync
+        run: |
+          if [ -z "${{ secrets.APP_URL }}" ] || [ -z "${{ secrets.ADMIN_SYNC_TOKEN }}" ]; then
+            echo "::error::APP_URL and ADMIN_SYNC_TOKEN repo secrets must be set."
+            exit 1
+          fi
+          echo "Calling sync on ${{ secrets.APP_URL }} …"
+          status=$(curl -sS -o /tmp/sync.json -w "%{http_code}" \
+            --max-time 600 \
+            -X POST "${{ secrets.APP_URL }}/api/cards/sync" \
+            -H "x-admin-token: ${{ secrets.ADMIN_SYNC_TOKEN }}")
+          echo "HTTP $status"
+          cat /tmp/sync.json || true
+          echo ""
+          if [ "$status" != "200" ]; then
+            echo "::error::Sync failed with HTTP $status"
+            exit 1
+          fi

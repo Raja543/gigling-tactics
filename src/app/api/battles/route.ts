@@ -48,13 +48,14 @@ export async function POST(request: Request) {
 
     const playerCards = deck.deckCards.map(dc => dc.card);
 
-    // 2. Matchmaking: ELO band + win/loss-streak adjustment.
+    // 2. Matchmaking: ELO band + win/loss-streak adjustment + beginner ramp.
     const playerOvrAvg = Math.floor(playerCards.reduce((sum, c) => sum + c.ovr, 0) / playerCards.length);
     const elo = deck.user.eloRating;
+    const battlesPlayed = deck.user.totalBattles;
 
-    // Pick the candidate tier from the player's strength so the pool matches.
-    const matchTier: ArenaTier =
-      playerOvrAvg >= 85 ? 'LEGEND' : playerOvrAvg >= 70 ? 'GOLD' : playerOvrAvg >= 55 ? 'SILVER' : 'BRONZE';
+    // New players (still placing or bottomed-out) get an easier, un-optimized ramp
+    // so the early game is winnable and fun instead of a wall of tuned synergy teams.
+    const isNewbie = battlesPlayed < 8 || elo < 1050;
 
     // Current win/loss streak from the last few battles (most recent first).
     const recent = await db.battle.findMany({
@@ -69,13 +70,23 @@ export async function POST(request: Request) {
       else if (b.result === 'LOSS') { if (streak <= 0) streak--; else break; }
       else break;
     }
-    
-    const isBossMatch = streak >= 3;
-    const streakAdj = isBossMatch ? 12 + Math.min(8, streak) : Math.max(-8, Math.min(6, streak * 2));
+
+    // Boss matches only for established players; never during the beginner ramp.
+    const isBossMatch = !isNewbie && streak >= 3;
+    const streakAdj = isBossMatch ? 12 + Math.min(8, streak) : Math.max(-10, Math.min(6, streak * 2));
+    // Beginners face a mild OVR handicap; combined with the un-optimized (casual)
+    // AI draft this lands a winnable ~70-80% early win rate rather than a sweep.
+    const newbieHandicap = isNewbie ? -5 : 0;
     const variance = Math.floor(Math.random() * 5) - 2; // +/-2 jitter
-    const targetOvr = Math.max(40, Math.min(99, playerOvrAvg + streakAdj + variance));
-    // Tighter matchmaking at higher ELO (skilled players get fairer fights).
-    const band = elo >= 1900 ? 3 : elo >= 1300 ? 4 : 6;
+    const targetOvr = Math.max(40, Math.min(99, playerOvrAvg + streakAdj + newbieHandicap + variance));
+
+    // Derive the candidate tier from the (handicapped) target so beginners can be
+    // matched against genuinely weaker cards, not floored at their own tier.
+    const matchTier: ArenaTier =
+      targetOvr >= 85 ? 'LEGEND' : targetOvr >= 70 ? 'GOLD' : targetOvr >= 55 ? 'SILVER' : 'BRONZE';
+
+    // Tighter matchmaking at higher ELO; a bit wider low down so weaker cards qualify.
+    const band = elo >= 1900 ? 3 : elo >= 1300 ? 4 : 7;
 
     const aiTeamEntries = await generateAITeam(matchTier, {
       excludeUserId: deck.userId,
@@ -83,6 +94,7 @@ export async function POST(request: Request) {
       targetOvr,
       band,
       isBossMatch,
+      casual: isNewbie,
     });
     const aiCards = aiTeamEntries.map((e) => e.card);
 
@@ -107,6 +119,8 @@ export async function POST(request: Request) {
         eloLoss += 10;
       }
       if (eloLoss < 8) eloLoss = 8;
+      // Gentler losses for new players so a rough start doesn't bury them.
+      if (isNewbie) eloLoss = Math.min(eloLoss, 8);
       eloChange = -eloLoss;
     } else {
       eloChange = 5; // Draw

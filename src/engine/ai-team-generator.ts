@@ -13,7 +13,7 @@ interface AIEntry {
  */
 export async function generateAITeam(
   tier: ArenaTier,
-  opts: { excludeUserId?: string; excludeCardIds?: string[]; targetOvr?: number; band?: number; isBossMatch?: boolean } = {},
+  opts: { excludeUserId?: string; excludeCardIds?: string[]; targetOvr?: number; band?: number; isBossMatch?: boolean; casual?: boolean } = {},
 ): Promise<AIEntry[]> {
   const ranges: Record<ArenaTier, [number, number]> = {
     UNRANKED: [40, 55],
@@ -96,12 +96,8 @@ export async function generateAITeam(
     return score;
   };
 
-  // Sort candidates by combat score (highest first)
-  const sortedCandidates = [...candidates].sort((a, b) => combatScore(b) - combatScore(a));
-  
   const picked: Card[] = [];
   const seen = new Set<string>();
-  
   const addCard = (c: Card) => {
     if (!seen.has(c.giglingId)) {
       seen.add(c.giglingId);
@@ -109,30 +105,32 @@ export async function generateAITeam(
     }
   };
 
-  // Pick the absolute best combat card as our anchor
-  for (const c of sortedCandidates) {
-    if (picked.length === 0) {
-      addCard(c);
-      break;
-    }
-  }
-
-  const anchorFaction = picked[0].faction;
-
-  // Strict Synergy Search: aggressively find 2 more cards of the SAME faction
-  if (anchorFaction && anchorFaction !== "NONE") {
-    for (const c of sortedCandidates) {
+  if (opts.casual) {
+    // Beginner-friendly: a plain, un-optimized opponent. No combat-trait drafting
+    // and no forced same-faction synergy stacking, so new players aren't crushed
+    // by a perfectly-tuned team at equal OVR.
+    const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+    for (const c of shuffled) {
       if (picked.length >= 3) break;
-      if (c.faction === anchorFaction) {
-        addCard(c);
+      addCard(c);
+    }
+  } else {
+    // Competitive: draft by combat score and aggressively stack faction synergy.
+    const sortedCandidates = [...candidates].sort((a, b) => combatScore(b) - combatScore(a));
+    for (const c of sortedCandidates) {
+      if (picked.length === 0) { addCard(c); break; }
+    }
+    const anchorFaction = picked[0].faction;
+    if (anchorFaction && anchorFaction !== "NONE") {
+      for (const c of sortedCandidates) {
+        if (picked.length >= 3) break;
+        if (c.faction === anchorFaction) addCard(c);
       }
     }
-  }
-
-  // If we couldn't find 3 of the same faction, just fill the rest with top combat scores
-  for (const c of sortedCandidates) {
-    if (picked.length >= 3) break;
-    addCard(c);
+    for (const c of sortedCandidates) {
+      if (picked.length >= 3) break;
+      addCard(c);
+    }
   }
 
   const roles: CardRole[] = ['FRONTLINE', 'DPS', 'SUPPORT'];

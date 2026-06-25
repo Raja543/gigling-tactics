@@ -177,9 +177,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('[battles] POST failed:', error);
-    // TEMP: surface the real cause to the client for production debugging.
-    const detail = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ success: false, error: `Failed to start battle: ${detail}` }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Failed to start battle.' }, { status: 500 });
   }
 }
 

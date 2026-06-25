@@ -6,6 +6,11 @@ import { unlockAchievements } from '@/engine/achievements';
 import { ArenaTier } from '@prisma/client';
 import { normalizeAddress } from '@/lib/utils';
 
+// A battle does several DB round-trips + a write. Give it headroom so a cold
+// (auto-suspended) serverless DB or cross-region latency can't trip the default
+// function timeout in production.
+export const maxDuration = 30;
+
 const VALID_ARENA_TIERS = new Set<string>(Object.values(ArenaTier));
 
 export async function POST(request: Request) {

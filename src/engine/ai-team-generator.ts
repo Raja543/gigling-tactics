@@ -45,7 +45,7 @@ export async function generateAITeam(
     const tightMax = Math.min(maxOvr, opts.targetOvr + band);
     candidates = await db.card.findMany({
       where: { ovr: { gte: tightMin, lte: tightMax }, ...exclude },
-      take: 400,
+      take: 60,
     });
   }
 
@@ -53,13 +53,13 @@ export async function generateAITeam(
   if (candidates.length < 3) {
     candidates = await db.card.findMany({
       where: { ovr: { gte: minOvr, lte: maxOvr }, ...exclude },
-      take: 400,
+      take: 60,
     });
   }
 
   // Extreme fallback
   if (candidates.length < 3) {
-    candidates = await db.card.findMany({ where: exclude, take: 400 });
+    candidates = await db.card.findMany({ where: exclude, take: 60 });
   }
   if (candidates.length < 3) {
     throw new Error('Not enough cards in database to generate an AI team. Sync the leaderboard first.');

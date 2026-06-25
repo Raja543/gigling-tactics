@@ -183,9 +183,8 @@ npm test
 ## ☁️ Deploy (Vercel)
 
 1. Import the repo into Vercel.
-2. Add all env vars from `.env.example` in the project settings.
-3. Run `prisma migrate deploy` against your production DB.
-4. Deploy. (`vercel.json` is included.)
+2. Add all env vars from `.env.example` in the project settings (**both `DATABASE_URL` and `DIRECT_URL`** — Prisma needs `DIRECT_URL` for migrations).
+3. Deploy. The `vercel-build` script runs `prisma generate && prisma migrate deploy && next build`, so **pending migrations are applied automatically on every deploy** — no manual migrate step.
 
 ---
 

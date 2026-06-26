@@ -5,6 +5,7 @@ import { Footer } from "@/components/layout/Footer";
 import { WalletProvider } from "@/components/wallet/WalletProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { CommandPalette } from "@/components/ui/CommandPalette";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "Gigling Tactics",
@@ -28,6 +29,7 @@ export default function RootLayout({
             </main>
           </ToastProvider>
         </WalletProvider>
+        <Analytics />
       </body>
     </html>
   );
